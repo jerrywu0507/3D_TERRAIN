@@ -1133,32 +1133,32 @@ const managedPanels = [
   },
   {
     key: "center",
-    label: "中心",
+    label: "中心 (Center)",
     panel: centerCoordinatePanel
   },
   {
     key: "coordinate",
-    label: "座標",
+    label: "座標 (Coordinates)",
     panel: coordinatePanel
   },
   {
     key: "search",
-    label: "搜尋",
+    label: "搜尋 (Search)",
     panel: coordinateSearchPanel
   },
   {
     key: "mission",
-    label: "任務",
+    label: "任務 (Mission)",
     panel: missionPanel
   },
   {
     key: "elevation",
-    label: "高程",
+    label: "高程 (Elevation)",
     panel: elevationPanel
   },
   {
     key: "slope",
-    label: "坡度",
+    label: "坡度 (Slope)",
     panel: slopePanel
   }
 ];
@@ -1175,13 +1175,13 @@ interfaceControlPanel.innerHTML = `
       id="toggle-all-panels-button"
       class="interface-button"
     >
-      隱藏介面
+      隱藏介面 (Hide Interface)
     </button>
 
     <button
       id="scale-down-button"
       class="interface-button"
-      title="縮小介面"
+      title="縮小介面 (Zoom Out Interface)"
     >
       −
     </button>
@@ -1199,7 +1199,7 @@ interfaceControlPanel.innerHTML = `
     <button
       id="scale-up-button"
       class="interface-button"
-      title="放大介面"
+      title="放大介面 (Zoom In Interface)"
     >
       ＋
     </button>
@@ -1208,14 +1208,14 @@ interfaceControlPanel.innerHTML = `
       id="scale-reset-button"
       class="interface-button"
     >
-      比例重設
+      比例重設 (Reset Scale)
     </button>
 
     <button
       id="position-reset-button"
       class="interface-button"
     >
-      位置重設
+      位置重設 (Reset Position)
     </button>
   </div>
 
@@ -1369,8 +1369,8 @@ function updateAllPanelButtonState() {
 
   toggleAllPanelsButton.textContent =
     allPanelsVisible
-      ? "隱藏介面"
-      : "顯示介面";
+      ? "隱藏介面 (Hide Interface)"
+      : "顯示介面 (Show Interface)";
 }
 
 function setAllPanelsVisible(visible) {
@@ -1385,8 +1385,8 @@ function setAllPanelsVisible(visible) {
 
   toggleAllPanelsButton.textContent =
     visible
-      ? "隱藏介面"
-      : "顯示介面";
+      ? "隱藏介面 (Hide Interface)"
+      : "顯示介面 (Show Interface)";
 }
 
 function toggleAllPanels() {
@@ -2798,27 +2798,27 @@ function updateStatusPanel() {
       (Digital Elevation Model, DEM)
     </strong><br>
 
-    顯示網格：
+    顯示網格 (Display Grid)：
     ${width} × ${height}
 
-    ｜地面解析度：
+    ｜地面解析度 (Ground Resolution)：
     ${pixelSizeXMeters.toFixed(3)} ×
     ${pixelSizeYMeters.toFixed(3)}
     m/pixel
 
-    ｜地形範圍：
+    ｜地形範圍 (Terrain Extent)：
     ${terrainWidthKm.toFixed(3)} ×
     ${terrainDepthKm.toFixed(3)}
     km
 
     <br>
 
-    高程範圍：
+    高程範圍 (Elevation Range)：
     ${minHeightMeters.toFixed(1)} ～
     ${maxHeightMeters.toFixed(1)}
     m
 
-    ｜地形高差：
+    ｜地形高差 (Elevation Difference)：
     ${(
       maxHeightMeters -
       minHeightMeters
@@ -2830,25 +2830,25 @@ function updateStatusPanel() {
     NoData：
     ${demCleaningStatistics.invalidValues}
 
-    ｜修補：
+    ｜修補 (Repaired)：
     ${demCleaningStatistics.repairedInvalidValues}
 
-    ｜尖峰修正：
+    ｜尖峰修正 (Spike Correction)：
     ${demCleaningStatistics.spikeValues}
 
-    ｜剩餘無效：
+    ｜剩餘無效 (Remaining Invalid)：
     ${demCleaningStatistics.remainingInvalidValues}
 
     <br>
 
-    G：網格｜
-    A：座標軸｜
-    S：坡度｜
-    E：高程色帶｜
-    R：清除路線｜
-    U：顯示／隱藏介面｜
-    [ / ]：縮小／放大介面｜
-    面板上方把手：自由拖動
+    G：網格 (Grid)｜
+    A：座標軸 (Axes)｜
+    S：坡度 (Slope)｜
+    E：高程色帶 (Elevation Bands)｜
+    R：清除路線 (Clear Route)｜
+    U：顯示／隱藏介面 (Show/Hide Interface)｜
+    [ / ]：縮小／放大介面 (Zoom Interface Out/In)｜
+    面板上方把手：自由拖動 (Drag Handle: Free Drag)
   `;
 }
 
@@ -2890,21 +2890,21 @@ function updateCenterCoordinatePanel() {
       (Mission Area Center Coordinates)
     </strong><br>
 
-    中心緯度：
+    中心緯度 (Center Latitude)：
     ${geographic.latitudeDegrees.toFixed(6)}°<br>
 
-    中心經度：
+    中心經度 (Center Longitude)：
     ${normalizeLongitude(
       geographic.longitudeDegrees
     ).toFixed(6)}°<br>
 
-    中心高程：
+    中心高程 (Center Elevation)：
     ${
       Number.isFinite(
         centerElevationMeters
       )
         ? centerElevationMeters.toFixed(1)
-        : "無資料"
+        : "無資料 (No Data)"
     }
     m<br>
 
@@ -2926,7 +2926,7 @@ function executeCoordinateAction(action) {
     !terrainMetadata
   ) {
     showCoordinateSearchMessage(
-      "地形尚未載入完成",
+      "地形尚未載入完成 (Terrain Not Yet Loaded)",
       "#ffd84a"
     );
 
@@ -2952,7 +2952,7 @@ function executeCoordinateAction(action) {
     )
   ) {
     showCoordinateSearchMessage(
-      "請輸入有效的緯度與經度",
+      "請輸入有效的緯度與經度 (Please Enter a Valid Latitude and Longitude)",
       "#ff6b6b"
     );
 
@@ -2964,7 +2964,7 @@ function executeCoordinateAction(action) {
     latitudeDegrees > 90
   ) {
     showCoordinateSearchMessage(
-      "緯度必須介於 -90° 到 90°",
+      "緯度必須介於 -90° 到 90° (Latitude Must Be Between -90° and 90°)",
       "#ff6b6b"
     );
 
@@ -2987,7 +2987,7 @@ function executeCoordinateAction(action) {
 
   if (!point) {
     showCoordinateSearchMessage(
-      "此座標不在目前 DEM 範圍內，或沒有有效高程資料",
+      "此座標不在目前 DEM 範圍內，或沒有有效高程資料 (This Coordinate Is Outside the Current DEM Extent or Has No Valid Elevation Data)",
       "#ff6b6b"
     );
 
@@ -3015,7 +3015,7 @@ function executeCoordinateAction(action) {
     );
 
     showCoordinateSearchMessage(
-      `已設定起點：` +
+      `已設定起點 (Start Point Set)：` +
       `${point.latitudeDegrees.toFixed(6)}°, ` +
       `${point.longitudeDegrees.toFixed(6)}°`,
       "#42ff78"
@@ -3030,7 +3030,7 @@ function executeCoordinateAction(action) {
     );
 
     showCoordinateSearchMessage(
-      `已設定終點：` +
+      `已設定終點 (Goal Point Set)：` +
       `${point.latitudeDegrees.toFixed(6)}°, ` +
       `${point.longitudeDegrees.toFixed(6)}°`,
       "#ff7777"
@@ -3040,7 +3040,7 @@ function executeCoordinateAction(action) {
   }
 
   showCoordinateSearchMessage(
-    `已找到位置，高程：` +
+    `已找到位置，高程 (Location Found, Elevation)：` +
     `${point.elevationMeters.toFixed(1)} m`,
     "#67d9ff"
   );
@@ -3555,31 +3555,31 @@ function showCoordinateInformation(
       (Lunar Surface Coordinates)
     </strong><br>
 
-    經度：
+    經度 (Longitude)：
     ${point.longitudeDegrees.toFixed(6)}°<br>
 
-    緯度：
+    緯度 (Latitude)：
     ${point.latitudeDegrees.toFixed(6)}°<br>
 
-    絕對高程：
+    絕對高程 (Absolute Elevation)：
     ${point.elevationMeters.toFixed(1)}
     m
 
     <hr class="panel-divider">
 
-    投影 X：
+    投影 X (Projected X)：
     ${point.projectedXMeters.toFixed(2)}
     m<br>
 
-    投影 Y：
+    投影 Y (Projected Y)：
     ${point.projectedYMeters.toFixed(2)}
     m<br>
 
-    局部 X：
+    局部 X (Local X)：
     ${point.localXKm.toFixed(3)}
     km<br>
 
-    局部 Z：
+    局部 Z (Local Z)：
     ${point.localZKm.toFixed(3)}
     km<br>
 
@@ -3703,6 +3703,7 @@ function buildAndAnalyzeRoute() {
       </strong><br>
 
       沿線沒有足夠的有效高程資料。
+      (Insufficient Valid Elevation Data Along the Route.)
     `;
 
     return;
@@ -4021,8 +4022,8 @@ function updateMissionWaitingPanel(
     ">
       ${
         isStart
-          ? "起點已設定"
-          : "終點已設定"
+          ? "起點已設定 (Start Point Set)"
+          : "終點已設定 (Goal Point Set)"
       }
     </span>
 
@@ -4039,8 +4040,8 @@ function updateMissionWaitingPanel(
 
     ${
       isStart
-        ? "請設定終點。"
-        : "請設定起點。"
+        ? "請設定終點。(Please Set the Goal Point.)"
+        : "請設定起點。(Please Set the Start Point.)"
     }
   `;
 }
@@ -4480,32 +4481,32 @@ function showMissionInstructions() {
       (Rover Mission Route)
     </strong><br>
 
-    第一次點擊：
-    設定起點<br>
+    第一次點擊 (First Click)：
+    設定起點 (Set Start Point)<br>
 
-    第二次點擊：
-    設定終點<br>
+    第二次點擊 (Second Click)：
+    設定終點 (Set Goal Point)<br>
 
-    第三次點擊：
-    建立新路線<br>
-
-    <br>
-
-    也可以輸入經緯度後選擇：
+    第三次點擊 (Third Click)：
+    建立新路線 (Create New Route)<br>
 
     <br>
 
-    搜尋位置<br>
-    設為起點<br>
-    設為終點<br>
+    也可以輸入經緯度後選擇 (Or Enter Latitude/Longitude and Choose)：
+
+    <br>
+
+    搜尋位置 (Search Location)<br>
+    設為起點 (Set as Start)<br>
+    設為終點 (Set as Goal)<br>
 
     <br>
 
     <span style="color:#aaaaaa">
-      綠色標記：起點<br>
-      紅色標記：終點<br>
-      橘色標記：搜尋位置<br>
-      白色線：貼地路線
+      綠色標記：起點 (Green Marker: Start)<br>
+      紅色標記：終點 (Red Marker: Goal)<br>
+      橘色標記：搜尋位置 (Orange Marker: Search Location)<br>
+      白色線：貼地路線 (White Line: Ground-Hugging Route)
     </span>
   `;
 }
@@ -4963,7 +4964,7 @@ const enhancedProfileInformation =
 // 加入原本的介面控制系統
 managedPanels.push({
   key: "profile",
-  label: "剖面",
+  label: "剖面 (Profile)",
   panel: enhancedRouteProfilePanel
 });
 
@@ -4977,7 +4978,7 @@ enhancedProfileVisibilityButton.dataset.panelKey =
   "profile";
 
 enhancedProfileVisibilityButton.textContent =
-  "剖面";
+  "剖面 (Profile)";
 
 const interfaceControlRows =
   interfaceControlPanel.querySelectorAll(
