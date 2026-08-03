@@ -1599,14 +1599,14 @@ clickMarker.visible = false;
 scene.add(clickMarker);
 
 const startMarker =
-  createSphereMarker(0x00ff66);
+  createFlagMarker(0x00ff66);
 
 startMarker.visible = false;
 
 scene.add(startMarker);
 
 const goalMarker =
-  createSphereMarker(0xff3333);
+  createFlagMarker(0xff3333);
 
 goalMarker.visible = false;
 
@@ -1636,6 +1636,114 @@ function createSphereMarker(color) {
   marker.renderOrder = 10;
 
   return marker;
+}
+
+function createFlagMarker(color) {
+  const group = new THREE.Group();
+
+  const poleHeightKm =
+    MARKER_RADIUS_KM * 3;
+
+  const poleRadiusKm =
+    MARKER_RADIUS_KM * 0.12;
+
+  const poleGeometry =
+    new THREE.CylinderGeometry(
+      poleRadiusKm,
+      poleRadiusKm,
+      poleHeightKm,
+      8
+    );
+
+  const poleMaterial =
+    new THREE.MeshBasicMaterial({
+      color: 0xdddddd,
+      depthTest: false,
+      depthWrite: false
+    });
+
+  const pole =
+    new THREE.Mesh(
+      poleGeometry,
+      poleMaterial
+    );
+
+  pole.position.y =
+    poleHeightKm / 2;
+
+  pole.renderOrder = 10;
+
+  group.add(pole);
+
+  const bannerWidthKm =
+    MARKER_RADIUS_KM * 1.8;
+
+  const bannerHeightKm =
+    MARKER_RADIUS_KM * 1.1;
+
+  const bannerThicknessKm =
+    MARKER_RADIUS_KM * 0.25;
+
+  const bannerShape =
+    new THREE.Shape();
+
+  bannerShape.moveTo(
+    0,
+    bannerHeightKm / 2
+  );
+
+  bannerShape.lineTo(
+    bannerWidthKm,
+    0
+  );
+
+  bannerShape.lineTo(
+    0,
+    -bannerHeightKm / 2
+  );
+
+  bannerShape.lineTo(
+    0,
+    bannerHeightKm / 2
+  );
+
+  const bannerGeometry =
+    new THREE.ExtrudeGeometry(
+      bannerShape,
+      {
+        depth: bannerThicknessKm,
+        bevelEnabled: false
+      }
+    );
+
+  const bannerMaterial =
+    new THREE.MeshBasicMaterial({
+      color,
+      depthTest: false,
+      depthWrite: false,
+      side: THREE.DoubleSide
+    });
+
+  const banner =
+    new THREE.Mesh(
+      bannerGeometry,
+      bannerMaterial
+    );
+
+  banner.position.set(
+    poleRadiusKm,
+    poleHeightKm * 0.62,
+    -bannerThicknessKm / 2
+  );
+
+  banner.renderOrder = 10;
+
+  group.add(banner);
+
+  group.userData.isFlagMarker =
+    true;
+
+  return group;
 }
 
 // ======================================================
@@ -3660,6 +3768,12 @@ function placeMarkerOnSurface(
   marker,
   point
 ) {
+  const verticalOffsetKm =
+    marker.userData.isFlagMarker
+      ? MARKER_SURFACE_GAP_KM
+      : MARKER_RADIUS_KM +
+        MARKER_SURFACE_GAP_KM;
+
   marker.position.set(
     point.localXKm,
 
@@ -3668,8 +3782,7 @@ function placeMarkerOnSurface(
       1000
     ) *
     VERTICAL_EXAGGERATION +
-    MARKER_RADIUS_KM +
-    MARKER_SURFACE_GAP_KM,
+    verticalOffsetKm,
 
     point.localZKm
   );
@@ -5719,6 +5832,9 @@ function createEnhancedRouteHazardMarkers(
     {
       type: "maximum-slope",
 
+      shape:
+        "triangle",
+
       title:
         "最大坡度點 " +
         "(Maximum Slope Point)",
@@ -5855,6 +5971,9 @@ function createEnhancedRouteHazardMarkers(
       {
         type:
           "unsafe-section",
+
+        shape:
+          "triangle",
 
         title:
           "不安全路段 " +
