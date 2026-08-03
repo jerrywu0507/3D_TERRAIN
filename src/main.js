@@ -86,6 +86,15 @@ let routeSamples = [];
 let interfaceScale = DEFAULT_INTERFACE_SCALE;
 let allPanelsVisible = true;
 
+const INTERFACE_LANGUAGE_STORAGE_KEY = "interfaceLanguage";
+
+let currentLanguage =
+  localStorage.getItem(
+    INTERFACE_LANGUAGE_STORAGE_KEY
+  ) === "en"
+    ? "en"
+    : "zh";
+
 let demCleaningStatistics = {
   invalidValues: 0,
   repairedInvalidValues: 0,
@@ -218,6 +227,14 @@ const interfaceStyle = document.createElement("style");
 interfaceStyle.textContent = `
   :root {
     --interface-scale: ${DEFAULT_INTERFACE_SCALE};
+  }
+
+  :root[data-lang="zh"] .lang-en {
+    display: none;
+  }
+
+  :root[data-lang="en"] .lang-zh {
+    display: none;
   }
 
   .interface-panel {
@@ -454,6 +471,35 @@ function stopPanelEvents(panel) {
   }
 }
 
+const BILINGUAL_TEXT_PATTERN =
+  /([\u3000-\u303F\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF\uFF00-\uFF19\uFF1B-\uFF5B\uFF5D-\uFFEF]+)\s*\(([^()<>]+)\)/g;
+
+function wrapBilingualText(html) {
+  return html.replace(
+    BILINGUAL_TEXT_PATTERN,
+    (match, chineseText, englishText) => {
+      if (!/[A-Za-z]/.test(englishText)) {
+        return match;
+      }
+
+      return (
+        `<span class="lang-zh">${chineseText}</span>` +
+        `<span class="lang-en">${englishText}</span>`
+      );
+    }
+  );
+}
+
+function setLocalizedHtml(element, html) {
+  element.innerHTML =
+    wrapBilingualText(html);
+}
+
+function appendLocalizedHtml(element, html) {
+  element.innerHTML +=
+    wrapBilingualText(html);
+}
+
 function createLegendRow(color, text) {
   return `
     <div class="legend-row">
@@ -491,10 +537,10 @@ function makePanelDraggable(
   handle.className =
     "panel-drag-handle";
 
-  handle.innerHTML = `
+  handle.innerHTML = wrapBilingualText(`
     <span aria-hidden="true">⠿</span>
     <span>${handleText}</span>
-  `;
+  `);
 
   panel.prepend(handle);
 
@@ -736,7 +782,7 @@ if (!statusPanel) {
   statusPanel.classList.add("interface-panel");
 }
 
-statusPanel.innerHTML = `
+statusPanel.innerHTML = wrapBilingualText(`
   <strong>
     Artemis III／Nobile Rim 2 數位高程模型
     (Digital Elevation Model, DEM)
@@ -744,7 +790,7 @@ statusPanel.innerHTML = `
 
   正在載入並清理地形資料
   (Loading and Cleaning Terrain Data)...
-`;
+`);
 
 // ======================================================
 // 10. 月面座標面板（Lunar Coordinate Panel）
@@ -759,7 +805,7 @@ const coordinatePanel = createPanel({
   pointerEvents: "none"
 });
 
-coordinatePanel.innerHTML = `
+coordinatePanel.innerHTML = wrapBilingualText(`
   <strong>
     月面實際座標
     (Lunar Surface Coordinates)
@@ -767,7 +813,7 @@ coordinatePanel.innerHTML = `
 
   點擊地形或搜尋座標以讀取資料
   (Click the Terrain or Search Coordinates)
-`;
+`);
 
 // ======================================================
 // 11. 任務區中心座標面板（Mission Area Center Panel）
@@ -782,7 +828,7 @@ const centerCoordinatePanel = createPanel({
   pointerEvents: "none"
 });
 
-centerCoordinatePanel.innerHTML = `
+centerCoordinatePanel.innerHTML = wrapBilingualText(`
   <strong>
     任務區中心座標
     (Mission Area Center Coordinates)
@@ -790,7 +836,7 @@ centerCoordinatePanel.innerHTML = `
 
   正在計算中心座標
   (Calculating Center Coordinates)...
-`;
+`);
 
 // ======================================================
 // 12. 任務路線面板（Mission Route Panel）
@@ -820,7 +866,7 @@ const slopePanel = createPanel({
   userSelect: "none"
 });
 
-slopePanel.innerHTML = `
+slopePanel.innerHTML = wrapBilingualText(`
   <div class="layer-header">
     <strong>
       坡度圖層
@@ -839,30 +885,30 @@ slopePanel.innerHTML = `
   ">
     ${createLegendRow(
       "#245cff",
-      "0–5°　藍色 (Blue)"
+      "0–5° 藍色 (Blue)"
     )}
 
     ${createLegendRow(
       "#67d9ff",
-      "5–10°　淡藍色 (Light Blue)"
+      "5–10° 淡藍色 (Light Blue)"
     )}
 
     ${createLegendRow(
       "#ffdf3f",
-      "10–15°　黃色 (Yellow)"
+      "10–15° 黃色 (Yellow)"
     )}
 
     ${createLegendRow(
       "#ff3b30",
-      "15–20°　紅色 (Red)"
+      "15–20° 紅色 (Red)"
     )}
 
     ${createLegendRow(
       "#800000",
-      ">20°　深紅色 (Dark Red)"
+      ">20° 深紅色 (Dark Red)"
     )}
   </div>
-`;
+`);
 
 stopPanelEvents(slopePanel);
 
@@ -893,7 +939,7 @@ const elevationPanel = createPanel({
   userSelect: "none"
 });
 
-elevationPanel.innerHTML = `
+elevationPanel.innerHTML = wrapBilingualText(`
   <div class="layer-header">
     <strong>
       等高色帶圖層
@@ -916,7 +962,7 @@ elevationPanel.innerHTML = `
     地形載入後顯示高程分級
     (Elevation Classes Appear After Loading)
   </div>
-`;
+`);
 
 stopPanelEvents(elevationPanel);
 
@@ -949,7 +995,7 @@ const coordinateSearchPanel = createPanel({
   userSelect: "none"
 });
 
-coordinateSearchPanel.innerHTML = `
+coordinateSearchPanel.innerHTML = wrapBilingualText(`
   <strong>
     經緯度搜尋與起終點設定
     (Coordinate Search and Route Point Input)
@@ -1036,7 +1082,7 @@ coordinateSearchPanel.innerHTML = `
     輸入月球緯度與經度後選擇操作
     (Enter Lunar Latitude and Longitude)
   </div>
-`;
+`);
 
 stopPanelEvents(coordinateSearchPanel);
 
@@ -1169,7 +1215,7 @@ const interfaceControlPanel =
 interfaceControlPanel.className =
   "interface-control-panel";
 
-interfaceControlPanel.innerHTML = `
+setLocalizedHtml(interfaceControlPanel, `
   <div class="interface-control-row">
     <button
       id="toggle-all-panels-button"
@@ -1181,7 +1227,7 @@ interfaceControlPanel.innerHTML = `
     <button
       id="scale-down-button"
       class="interface-button"
-      title="縮小介面 (Zoom Out Interface)"
+      title="縮小介面"
     >
       −
     </button>
@@ -1199,7 +1245,7 @@ interfaceControlPanel.innerHTML = `
     <button
       id="scale-up-button"
       class="interface-button"
-      title="放大介面 (Zoom In Interface)"
+      title="放大介面"
     >
       ＋
     </button>
@@ -1216,6 +1262,13 @@ interfaceControlPanel.innerHTML = `
       class="interface-button"
     >
       位置重設 (Reset Position)
+    </button>
+
+    <button
+      id="language-toggle-button"
+      class="interface-button"
+    >
+      EN
     </button>
   </div>
 
@@ -1236,7 +1289,7 @@ interfaceControlPanel.innerHTML = `
       </button>
     `).join("")}
   </div>
-`;
+`);
 
 document.body.appendChild(
   interfaceControlPanel
@@ -1287,6 +1340,11 @@ const positionResetButton =
     "#position-reset-button"
   );
 
+const languageToggleButton =
+  document.querySelector(
+    "#language-toggle-button"
+  );
+
 const panelVisibilityButtons = [
   ...document.querySelectorAll(
     ".panel-visibility-button"
@@ -1317,6 +1375,62 @@ function changeInterfaceScale(amount) {
     interfaceScale + amount
   );
 }
+
+function updateStaticTitles() {
+  const isChinese =
+    currentLanguage === "zh";
+
+  scaleDownButton.title =
+    isChinese
+      ? "縮小介面"
+      : "Zoom Out Interface";
+
+  scaleUpButton.title =
+    isChinese
+      ? "放大介面"
+      : "Zoom In Interface";
+
+  languageToggleButton.textContent =
+    isChinese
+      ? "EN"
+      : "中文";
+
+  languageToggleButton.title =
+    isChinese
+      ? "切換為英文"
+      : "Switch to Chinese";
+}
+
+function applyLanguage(language) {
+  currentLanguage = language;
+
+  document.documentElement.dataset.lang =
+    currentLanguage;
+
+  localStorage.setItem(
+    INTERFACE_LANGUAGE_STORAGE_KEY,
+    currentLanguage
+  );
+
+  updateStaticTitles();
+}
+
+function toggleLanguage() {
+  applyLanguage(
+    currentLanguage === "zh"
+      ? "en"
+      : "zh"
+  );
+}
+
+languageToggleButton.addEventListener(
+  "click",
+  () => {
+    toggleLanguage();
+  }
+);
+
+applyLanguage(currentLanguage);
 
 function getManagedPanel(panelKey) {
   return managedPanels.find(
@@ -1367,10 +1481,12 @@ function updateAllPanelButtonState() {
         )
     );
 
-  toggleAllPanelsButton.textContent =
+  setLocalizedHtml(
+    toggleAllPanelsButton,
     allPanelsVisible
       ? "隱藏介面 (Hide Interface)"
-      : "顯示介面 (Show Interface)";
+      : "顯示介面 (Show Interface)"
+  );
 }
 
 function setAllPanelsVisible(visible) {
@@ -1383,10 +1499,12 @@ function setAllPanelsVisible(visible) {
 
   allPanelsVisible = visible;
 
-  toggleAllPanelsButton.textContent =
+  setLocalizedHtml(
+    toggleAllPanelsButton,
     visible
       ? "隱藏介面 (Hide Interface)"
-      : "顯示介面 (Show Interface)";
+      : "顯示介面 (Show Interface)"
+  );
 }
 
 function toggleAllPanels() {
@@ -1571,14 +1689,14 @@ async function loadTerrainData() {
       error
     );
 
-    statusPanel.innerHTML = `
+    statusPanel.innerHTML = wrapBilingualText(`
       <strong>
         載入失敗
         (Loading Failed)
       </strong><br>
 
       ${escapeHtml(error.message)}
-    `;
+    `);
   }
 }
 
@@ -1648,7 +1766,7 @@ function createTerrain(
     );
   }
 
-  statusPanel.innerHTML = `
+  statusPanel.innerHTML = wrapBilingualText(`
     <strong>
       Artemis III／Nobile Rim 2 數位高程模型
       (Digital Elevation Model, DEM)
@@ -1656,7 +1774,7 @@ function createTerrain(
 
     正在清理地形資料
     (Cleaning Terrain Data)...
-  `;
+  `);
 
   terrainElevations =
     cleanDemElevations(
@@ -2640,7 +2758,7 @@ function updateElevationLegend() {
       );
   }
 
-  elevationLegend.innerHTML = `
+  elevationLegend.innerHTML = wrapBilingualText(`
     ${legendHtml}
 
     <div style="
@@ -2651,7 +2769,7 @@ function updateElevationLegend() {
       藍色代表較低高程，紅色代表較高高程
       (Blue: Lower Elevation; Red: Higher Elevation)
     </div>
-  `;
+  `);
 }
 
 // ======================================================
@@ -2792,7 +2910,7 @@ function updateStatusPanel() {
     pixelSizeYMeters
   } = terrainMetadata;
 
-  statusPanel.innerHTML = `
+  statusPanel.innerHTML = wrapBilingualText(`
     <strong>
       Artemis III／Nobile Rim 2 數位高程模型
       (Digital Elevation Model, DEM)
@@ -2848,8 +2966,8 @@ function updateStatusPanel() {
     R：清除路線 (Clear Route)｜
     U：顯示／隱藏介面 (Show/Hide Interface)｜
     [ / ]：縮小／放大介面 (Zoom Interface Out/In)｜
-    面板上方把手：自由拖動 (Drag Handle: Free Drag)
-  `;
+    面板上方把手 (Drag Handle)：自由拖動 (Free Drag)
+  `);
 }
 
 // ======================================================
@@ -2884,7 +3002,7 @@ function updateCenterCoordinatePanel() {
       CENTRAL_MERIDIAN_DEGREES
     );
 
-  centerCoordinatePanel.innerHTML = `
+  centerCoordinatePanel.innerHTML = wrapBilingualText(`
     <strong>
       任務區中心座標
       (Mission Area Center Coordinates)
@@ -2913,7 +3031,7 @@ function updateCenterCoordinatePanel() {
       X = 0.000 km，
       Z = 0.000 km
     </span>
-  `;
+  `);
 }
 
 // ======================================================
@@ -2964,7 +3082,8 @@ function executeCoordinateAction(action) {
     latitudeDegrees > 90
   ) {
     showCoordinateSearchMessage(
-      "緯度必須介於 -90° 到 90° (Latitude Must Be Between -90° and 90°)",
+      '<span class="lang-zh">緯度必須介於 -90° 到 90°</span>' +
+      '<span class="lang-en">Latitude Must Be Between -90° and 90°</span>',
       "#ff6b6b"
     );
 
@@ -2987,7 +3106,9 @@ function executeCoordinateAction(action) {
 
   if (!point) {
     showCoordinateSearchMessage(
-      "此座標不在目前 DEM 範圍內，或沒有有效高程資料 (This Coordinate Is Outside the Current DEM Extent or Has No Valid Elevation Data)",
+      '<span class="lang-zh">此座標不在目前 DEM 範圍內，或沒有有效高程資料</span>' +
+      '<span class="lang-en">This Coordinate Is Outside the Current DEM ' +
+      'Extent or Has No Valid Elevation Data</span>',
       "#ff6b6b"
     );
 
@@ -3264,8 +3385,10 @@ function showCoordinateSearchMessage(
   coordinateSearchMessage.style.color =
     color;
 
-  coordinateSearchMessage.textContent =
-    message;
+  setLocalizedHtml(
+    coordinateSearchMessage,
+    message
+  );
 }
 
 // ======================================================
@@ -3549,7 +3672,7 @@ function placeMarkerOnSurface(
 function showCoordinateInformation(
   point
 ) {
-  coordinatePanel.innerHTML = `
+  coordinatePanel.innerHTML = wrapBilingualText(`
     <strong>
       月面實際座標
       (Lunar Surface Coordinates)
@@ -3596,7 +3719,7 @@ function showCoordinateInformation(
       Elevation Datum：
       Lunar Datum 0 m
     </span>
-  `;
+  `);
 }
 
 // ======================================================
@@ -3696,7 +3819,7 @@ function buildAndAnalyzeRoute() {
   if (
     routeSamples.length < 2
   ) {
-    missionPanel.innerHTML = `
+    missionPanel.innerHTML = wrapBilingualText(`
       <strong>
         路線建立失敗
         (Route Creation Failed)
@@ -3704,7 +3827,7 @@ function buildAndAnalyzeRoute() {
 
       沿線沒有足夠的有效高程資料。
       (Insufficient Valid Elevation Data Along the Route.)
-    `;
+    `);
 
     return;
   }
@@ -3905,7 +4028,7 @@ function updateMissionPanel(
       analysis.status
     );
 
-  missionPanel.innerHTML = `
+  missionPanel.innerHTML = wrapBilingualText(`
     <strong>
       月球車任務路線
       (Rover Mission Route)
@@ -3993,7 +4116,7 @@ function updateMissionPanel(
     ">
       ${status.label}
     </strong>
-  `;
+  `);
 }
 
 function updateMissionWaitingPanel(
@@ -4007,7 +4130,7 @@ function updateMissionWaitingPanel(
       ? startPoint
       : goalPoint;
 
-  missionPanel.innerHTML = `
+  missionPanel.innerHTML = wrapBilingualText(`
     <strong>
       月球車任務路線
       (Rover Mission Route)
@@ -4043,7 +4166,7 @@ function updateMissionWaitingPanel(
         ? "請設定終點。(Please Set the Goal Point.)"
         : "請設定起點。(Please Set the Start Point.)"
     }
-  `;
+  `);
 }
 
 function formatMissionPoint(
@@ -4475,7 +4598,7 @@ function removeRouteLine() {
 }
 
 function showMissionInstructions() {
-  missionPanel.innerHTML = `
+  missionPanel.innerHTML = wrapBilingualText(`
     <strong>
       月球車任務路線
       (Rover Mission Route)
@@ -4503,12 +4626,12 @@ function showMissionInstructions() {
     <br>
 
     <span style="color:#aaaaaa">
-      綠色標記：起點 (Green Marker: Start)<br>
-      紅色標記：終點 (Red Marker: Goal)<br>
-      橘色標記：搜尋位置 (Orange Marker: Search Location)<br>
-      白色線：貼地路線 (White Line: Ground-Hugging Route)
+      綠色標記 (Green Marker)：起點 (Start)<br>
+      紅色標記 (Red Marker)：終點 (Goal)<br>
+      橘色標記 (Orange Marker)：搜尋位置 (Search Location)<br>
+      白色線 (White Line)：貼地路線 (Ground-Hugging Route)
     </span>
-  `;
+  `);
 }
 
 // ======================================================
@@ -4866,7 +4989,7 @@ const enhancedRouteProfilePanel =
     userSelect: "none"
   });
 
-enhancedRouteProfilePanel.innerHTML = `
+enhancedRouteProfilePanel.innerHTML = wrapBilingualText(`
   <strong>
     路線高程剖面圖
     (Route Elevation Profile)
@@ -4945,7 +5068,7 @@ enhancedRouteProfilePanel.innerHTML = `
     點擊標記可查看該位置資料。
     (Click a Marker to View Its Data.)
   </div>
-`;
+`);
 
 stopPanelEvents(
   enhancedRouteProfilePanel
@@ -4977,8 +5100,10 @@ enhancedProfileVisibilityButton.className =
 enhancedProfileVisibilityButton.dataset.panelKey =
   "profile";
 
-enhancedProfileVisibilityButton.textContent =
-  "剖面 (Profile)";
+setLocalizedHtml(
+  enhancedProfileVisibilityButton,
+  "剖面 (Profile)"
+);
 
 const interfaceControlRows =
   interfaceControlPanel.querySelectorAll(
@@ -5714,11 +5839,11 @@ function createEnhancedRouteHazardMarkers(
             .slopeDegrees,
 
         detail:
-          `此連續路段共有 ` +
+          `<span class="lang-zh">此連續路段共有 ` +
           `${dangerousGroup.length} 個區段` +
-          `超過 ${WARNING_SLOPE_DEGREES}° ` +
-          `(${dangerousGroup.length} Segments Exceed ` +
-          `${WARNING_SLOPE_DEGREES}°)`
+          `超過 ${WARNING_SLOPE_DEGREES}°</span>` +
+          `<span class="lang-en">${dangerousGroup.length} Segments Exceed ` +
+          `${WARNING_SLOPE_DEGREES}°</span>`
       },
       usedMarkerKeys
     );
@@ -5834,7 +5959,7 @@ function showEnhancedHazardInformation(
   const slopeDegrees =
     marker.userData.slopeDegrees;
 
-  coordinatePanel.innerHTML = `
+  coordinatePanel.innerHTML = wrapBilingualText(`
     <strong style="
       color:${getEnhancedRouteSlopeColorCss(
         slopeDegrees
@@ -5878,7 +6003,7 @@ function showEnhancedHazardInformation(
       2
     )}
     公尺 (m)
-  `;
+  `);
 
   placeMarkerOnSurface(
     clickMarker,
@@ -6554,10 +6679,10 @@ function showEnhancedProfileSummary(
     !analysis ||
     routeSamples.length < 2
   ) {
-    enhancedProfileInformation.innerHTML = `
+    enhancedProfileInformation.innerHTML = wrapBilingualText(`
       尚未建立路線
       (No Route Created)
-    `;
+    `);
 
     return;
   }
@@ -6567,7 +6692,7 @@ function showEnhancedProfileSummary(
       analysis.maximumSlopeIndex
     ];
 
-  enhancedProfileInformation.innerHTML = `
+  enhancedProfileInformation.innerHTML = wrapBilingualText(`
     最大坡度位置
     (Maximum Slope Position)：
     <strong>
@@ -6590,7 +6715,7 @@ function showEnhancedProfileSummary(
         .dangerousSegmentIndices
         .length}
     </strong>
-  `;
+  `);
 }
 
 function handleEnhancedProfilePointerMove(
@@ -6683,7 +6808,7 @@ function handleEnhancedProfilePointerMove(
           ? "警告 (Warning)"
           : "不安全 (Unsafe)";
 
-  enhancedProfileInformation.innerHTML = `
+  enhancedProfileInformation.innerHTML = wrapBilingualText(`
     累積距離
     (Cumulative Distance)：
     <strong>
@@ -6735,7 +6860,7 @@ function handleEnhancedProfilePointerMove(
     ${selectedSample
       .longitudeDegrees
       .toFixed(6)}°
-  `;
+  `);
 
   drawEnhancedRouteProfile(
     routeSamples,
@@ -6775,10 +6900,10 @@ function resetEnhancedRouteProfile() {
   enhancedRouteAnalysis =
     null;
 
-  enhancedProfileInformation.innerHTML = `
+  enhancedProfileInformation.innerHTML = wrapBilingualText(`
     尚未建立路線
     (No Route Created)
-  `;
+  `);
 
   drawEnhancedRouteProfile(
     [],
@@ -6883,7 +7008,7 @@ buildAndAnalyzeRoute = function () {
   if (
     routeSamples.length < 2
   ) {
-    missionPanel.innerHTML = `
+    missionPanel.innerHTML = wrapBilingualText(`
       <strong>
         路線建立失敗
         (Route Creation Failed)
@@ -6891,7 +7016,7 @@ buildAndAnalyzeRoute = function () {
 
       沿線沒有足夠的有效高程資料。
       (Insufficient Valid Elevation Data Along the Route.)
-    `;
+    `);
 
     resetEnhancedRouteProfile();
 
@@ -7117,7 +7242,7 @@ updateMissionPanel = function (
       analysis.maximumDescentIndex
     ];
 
-  missionPanel.innerHTML += `
+  missionPanel.innerHTML += wrapBilingualText(`
     <hr class="panel-divider">
 
     <strong>
@@ -7202,7 +7327,7 @@ updateMissionPanel = function (
       紅色：&gt;15° 不安全
       (Red: Unsafe)
     </span>
-  `;
+  `);
 };
 
 // 初始顯示空白剖面圖
