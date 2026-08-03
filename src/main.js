@@ -4887,6 +4887,9 @@ const ENHANCED_ROUTE_COLOR_UNSAFE = 0xff3b30;
 const ENHANCED_HAZARD_MARKER_RADIUS_KM = 0.012;
 const ENHANCED_HAZARD_MARKER_GAP_KM = 0.004;
 
+const ENHANCED_HAZARD_TRIANGLE_RADIUS_KM = MARKER_RADIUS_KM;
+const ENHANCED_HAZARD_TRIANGLE_HEIGHT_KM = MARKER_RADIUS_KM * 1.8;
+
 // 單一取樣區段高程變化超過此值，視為高程突變
 const ENHANCED_SUDDEN_ELEVATION_CHANGE_METERS = 5;
 
@@ -5625,12 +5628,21 @@ function createEnhancedHazardMarker(
     markerKey
   );
 
+  const isTriangleMarker =
+    options.shape === "triangle";
+
   const geometry =
-    new THREE.SphereGeometry(
-      ENHANCED_HAZARD_MARKER_RADIUS_KM,
-      20,
-      20
-    );
+    isTriangleMarker
+      ? new THREE.ConeGeometry(
+          ENHANCED_HAZARD_TRIANGLE_RADIUS_KM,
+          ENHANCED_HAZARD_TRIANGLE_HEIGHT_KM,
+          3
+        )
+      : new THREE.SphereGeometry(
+          ENHANCED_HAZARD_MARKER_RADIUS_KM,
+          20,
+          20
+        );
 
   const material =
     new THREE.MeshBasicMaterial({
@@ -5645,13 +5657,18 @@ function createEnhancedHazardMarker(
       material
     );
 
+  const markerHeightOffsetKm =
+    isTriangleMarker
+      ? ENHANCED_HAZARD_TRIANGLE_HEIGHT_KM / 2
+      : ENHANCED_HAZARD_MARKER_RADIUS_KM;
+
   marker.position.set(
     point.localXKm,
 
     point.elevationMeters /
       1000 *
       VERTICAL_EXAGGERATION +
-      ENHANCED_HAZARD_MARKER_RADIUS_KM +
+      markerHeightOffsetKm +
       ENHANCED_HAZARD_MARKER_GAP_KM,
 
     point.localZKm
@@ -5733,6 +5750,9 @@ function createEnhancedRouteHazardMarkers(
       type:
         "maximum-ascent",
 
+      shape:
+        "triangle",
+
       title:
         "最大爬升點 " +
         "(Maximum Ascent Point)",
@@ -5769,6 +5789,9 @@ function createEnhancedRouteHazardMarkers(
     {
       type:
         "maximum-descent",
+
+      shape:
+        "triangle",
 
       title:
         "最大下降點 " +
@@ -6018,6 +6041,38 @@ function showEnhancedHazardInformation(
 
   clickMarker.visible =
     true;
+}
+
+function drawEnhancedProfileTriangleMarker(
+  context,
+  centerX,
+  centerY,
+  color
+) {
+  const triangleRadius = 6;
+
+  context.fillStyle = color;
+
+  context.beginPath();
+
+  context.moveTo(
+    centerX,
+    centerY - triangleRadius
+  );
+
+  context.lineTo(
+    centerX + triangleRadius * 0.9,
+    centerY + triangleRadius * 0.75
+  );
+
+  context.lineTo(
+    centerX - triangleRadius * 0.9,
+    centerY + triangleRadius * 0.75
+  );
+
+  context.closePath();
+
+  context.fill();
 }
 
 // ======================================================
@@ -6448,6 +6503,44 @@ function drawEnhancedRouteProfile(
   );
 
   context.fill();
+
+  // 最大爬升位置
+  const maximumAscentSample =
+    samples[
+      analysis.maximumAscentIndex
+    ];
+
+  drawEnhancedProfileTriangleMarker(
+    context,
+    xFromDistance(
+      maximumAscentSample
+        .cumulativeDistanceMeters
+    ),
+    yFromElevation(
+      maximumAscentSample
+        .elevationMeters
+    ),
+    "#00e676"
+  );
+
+  // 最大下降位置
+  const maximumDescentSample =
+    samples[
+      analysis.maximumDescentIndex
+    ];
+
+  drawEnhancedProfileTriangleMarker(
+    context,
+    xFromDistance(
+      maximumDescentSample
+        .cumulativeDistanceMeters
+    ),
+    yFromElevation(
+      maximumDescentSample
+        .elevationMeters
+    ),
+    "#40c4ff"
+  );
 
   // 滑鼠目前位置
   if (
