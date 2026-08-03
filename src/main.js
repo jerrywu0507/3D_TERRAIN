@@ -91,9 +91,9 @@ const INTERFACE_LANGUAGE_STORAGE_KEY = "interfaceLanguage";
 let currentLanguage =
   localStorage.getItem(
     INTERFACE_LANGUAGE_STORAGE_KEY
-  ) === "en"
-    ? "en"
-    : "zh";
+  ) === "zh"
+    ? "zh"
+    : "en";
 
 let demCleaningStatistics = {
   invalidValues: 0,
@@ -2956,6 +2956,12 @@ function updateStatusPanel() {
 
     ｜剩餘無效 (Remaining Invalid)：
     ${demCleaningStatistics.remainingInvalidValues}
+
+    <br>
+
+    左鍵 (Left-Click)：旋轉 (Rotate)｜
+    滾輪 (Wheel)：縮放 (Zoom)｜
+    右鍵 (Right-Click)：平移 (Pan)
 
     <br>
 
@@ -7332,3 +7338,5 @@ updateMissionPanel = function (
 
 // 初始顯示空白剖面圖
 resetEnhancedRouteProfile();
+
+setAllPanelsVisible(false);
