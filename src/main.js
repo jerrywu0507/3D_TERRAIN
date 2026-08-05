@@ -6781,6 +6781,52 @@ function drawEnhancedRouteProfile(
     "#40c4ff"
   );
 
+  // 不安全路段位置
+  const dangerousGroups =
+    groupEnhancedConsecutiveIndices(
+      analysis
+        .dangerousSegmentIndices
+    );
+
+  for (
+    const dangerousGroup of
+    dangerousGroups
+  ) {
+    let selectedIndex =
+      dangerousGroup[0];
+
+    for (
+      const index of
+      dangerousGroup
+    ) {
+      if (
+        samples[index]
+          .slopeDegrees >
+        samples[selectedIndex]
+          .slopeDegrees
+      ) {
+        selectedIndex =
+          index;
+      }
+    }
+
+    const selectedSample =
+      samples[selectedIndex];
+
+    drawEnhancedProfileTriangleMarker(
+      context,
+      xFromDistance(
+        selectedSample
+          .cumulativeDistanceMeters
+      ),
+      yFromElevation(
+        selectedSample
+          .elevationMeters
+      ),
+      "#ff3b30"
+    );
+  }
+
   // 滑鼠目前位置
   if (
     Number.isInteger(
