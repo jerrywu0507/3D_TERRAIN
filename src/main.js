@@ -19,6 +19,10 @@ const ROUTE_SURFACE_OFFSET_KM = 0.0001;
 const MARKER_RADIUS_KM = 0.008;
 const MARKER_SURFACE_GAP_KM = 0.001;
 
+const NAMED_POINT_LATITUDE_DEGREES = -84.122515;
+const NAMED_POINT_LONGITUDE_DEGREES = 57.725892;
+const NAMED_POINT_COLOR = 0x9c27b0;
+
 const SAFE_SLOPE_DEGREES = 10;
 const WARNING_SLOPE_DEGREES = 15;
 
@@ -82,6 +86,8 @@ let goalPoint = null;
 
 let routeLine = null;
 let routeSamples = [];
+
+let namedPointMarker = null;
 
 let interfaceScale = DEFAULT_INTERFACE_SCALE;
 let allPanelsVisible = true;
@@ -1746,6 +1752,36 @@ function createFlagMarker(color) {
   return group;
 }
 
+function createNamedPointMarker() {
+  const point =
+    createPointDataFromGeographicCoordinates(
+      NAMED_POINT_LATITUDE_DEGREES,
+      NAMED_POINT_LONGITUDE_DEGREES
+    );
+
+  if (!point) {
+    return;
+  }
+
+  namedPointMarker =
+    createFlagMarker(
+      NAMED_POINT_COLOR
+    );
+
+  namedPointMarker.userData.isNamedPointMarker =
+    true;
+
+  namedPointMarker.userData.point =
+    point;
+
+  placeMarkerOnSurface(
+    namedPointMarker,
+    point
+  );
+
+  scene.add(namedPointMarker);
+}
+
 // ======================================================
 // 18. 載入 DEM（Load DEM）
 // ======================================================
@@ -2121,6 +2157,7 @@ function createTerrain(
   updateCenterCoordinatePanel();
   updateElevationLegend();
   showMissionInstructions();
+  createNamedPointMarker();
 }
 
 // ======================================================
@@ -6162,6 +6199,89 @@ function showEnhancedHazardInformation(
     true;
 }
 
+// ======================================================
+// 46A. 命名標記點選取（Named Point Marker Selection）
+// ======================================================
+
+function pickNamedPointMarker(
+  event
+) {
+  if (!namedPointMarker) {
+    return null;
+  }
+
+  const rect =
+    renderer.domElement
+      .getBoundingClientRect();
+
+  pointer.x =
+    (
+      (
+        event.clientX -
+        rect.left
+      ) /
+      rect.width
+    ) *
+    2 -
+    1;
+
+  pointer.y =
+    -(
+      (
+        event.clientY -
+        rect.top
+      ) /
+      rect.height
+    ) *
+    2 +
+    1;
+
+  raycaster.setFromCamera(
+    pointer,
+    camera
+  );
+
+  const intersections =
+    raycaster.intersectObject(
+      namedPointMarker,
+      true
+    );
+
+  return intersections.length > 0
+    ? namedPointMarker
+    : null;
+}
+
+function selectNamedPointMarker() {
+  const point =
+    namedPointMarker.userData.point;
+
+  latitudeInput.value =
+    point.latitudeDegrees.toFixed(6);
+
+  longitudeInput.value =
+    point.longitudeDegrees.toFixed(6);
+
+  showCoordinateInformation(
+    point
+  );
+
+  placeMarkerOnSurface(
+    clickMarker,
+    point
+  );
+
+  clickMarker.visible =
+    true;
+
+  showCoordinateSearchMessage(
+    `已選取標記點 (Selected Marked Point)：` +
+    `${point.latitudeDegrees.toFixed(6)}°, ` +
+    `${point.longitudeDegrees.toFixed(6)}°`,
+    "#c77dff"
+  );
+}
+
 function drawEnhancedProfileTriangleMarker(
   context,
   centerX,
@@ -7360,6 +7480,20 @@ handleTerrainClick = function (
     showEnhancedHazardInformation(
       hazardMarker
     );
+
+    return;
+  }
+
+  // 檢查是否點擊命名標記點
+  const namedMarkerHit =
+    pickNamedPointMarker(
+      event
+    );
+
+  if (
+    namedMarkerHit
+  ) {
+    selectNamedPointMarker();
 
     return;
   }
