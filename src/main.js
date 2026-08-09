@@ -101,6 +101,8 @@ let currentLanguage =
     ? "zh"
     : "en";
 
+let profileCanvasReady = false;
+
 let demCleaningStatistics = {
   invalidValues: 0,
   repairedInvalidValues: 0,
@@ -504,6 +506,12 @@ function setLocalizedHtml(element, html) {
 function appendLocalizedHtml(element, html) {
   element.innerHTML +=
     wrapBilingualText(html);
+}
+
+function pickLangText(chineseText, englishText) {
+  return currentLanguage === "zh"
+    ? chineseText
+    : englishText;
 }
 
 function createLegendRow(color, text) {
@@ -1419,6 +1427,13 @@ function applyLanguage(language) {
   );
 
   updateStaticTitles();
+
+  if (profileCanvasReady) {
+    drawEnhancedRouteProfile(
+      routeSamples,
+      enhancedRouteAnalysis
+    );
+  }
 }
 
 function toggleLanguage() {
@@ -6370,7 +6385,10 @@ function drawEnhancedRouteProfile(
       "middle";
 
     context.fillText(
-      "尚未建立路線 (No Route Created)",
+      pickLangText(
+        "尚未建立路線",
+        "No Route Created"
+      ),
       width / 2,
       height / 2
     );
@@ -7002,7 +7020,10 @@ function drawEnhancedRouteProfile(
     "center";
 
   context.fillText(
-    "累積距離 (Cumulative Distance)",
+    pickLangText(
+      "累積距離",
+      "Cumulative Distance"
+    ),
     margin.left +
     plotWidth /
     2,
@@ -7024,7 +7045,10 @@ function drawEnhancedRouteProfile(
   );
 
   context.fillText(
-    "絕對高程 (Absolute Elevation)",
+    pickLangText(
+      "絕對高程",
+      "Absolute Elevation"
+    ),
     0,
     0
   );
@@ -7045,7 +7069,10 @@ function drawEnhancedRouteProfile(
     "bottom";
 
   context.fillText(
-    `最大坡度 (Maximum Slope)：` +
+    pickLangText(
+      "最大坡度：",
+      "Maximum Slope: "
+    ) +
     `${analysis.maximumSlopeDegrees.toFixed(2)}°`,
     margin.left + 5,
     margin.top - 8
@@ -7730,5 +7757,7 @@ updateMissionPanel = function (
 
 // 初始顯示空白剖面圖
 resetEnhancedRouteProfile();
+
+profileCanvasReady = true;
 
 setAllPanelsVisible(false);
