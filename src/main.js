@@ -597,6 +597,13 @@ function createLegendRow(color, text) {
 
 const draggablePanelRecords = [];
 
+let topPanelZIndex = 100;
+
+function bringPanelToFront(panel) {
+  topPanelZIndex += 1;
+  panel.style.zIndex = String(topPanelZIndex);
+}
+
 function makePanelDraggable(
   panel,
   handleText = "拖動面板 (Drag Panel)"
@@ -675,6 +682,8 @@ function makePanelDraggable(
       panel.classList.add(
         "panel-being-dragged"
       );
+
+      bringPanelToFront(panel);
 
       controls.enabled = false;
 
@@ -864,6 +873,8 @@ function makePanelResizable(panel) {
           panel.classList.add(
             "panel-being-dragged"
           );
+
+          bringPanelToFront(panel);
 
           controls.enabled = false;
 
