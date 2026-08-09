@@ -434,6 +434,54 @@ interfaceStyle.textContent = `
     z-index: 500 !important;
   }
 
+  .resize-handle {
+    position: absolute;
+    z-index: 30;
+    pointer-events: auto;
+    touch-action: none;
+  }
+
+  .resize-handle:hover,
+  .resize-handle.resize-handle-active {
+    background: rgba(103, 217, 255, 0.35);
+  }
+
+  .resize-handle-n,
+  .resize-handle-s {
+    left: 10px;
+    right: 10px;
+    height: 7px;
+    cursor: ns-resize;
+  }
+
+  .resize-handle-n { top: -3px; }
+  .resize-handle-s { bottom: -3px; }
+
+  .resize-handle-e,
+  .resize-handle-w {
+    top: 10px;
+    bottom: 10px;
+    width: 7px;
+    cursor: ew-resize;
+  }
+
+  .resize-handle-e { right: -3px; }
+  .resize-handle-w { left: -3px; }
+
+  .resize-handle-ne,
+  .resize-handle-nw,
+  .resize-handle-se,
+  .resize-handle-sw {
+    width: 14px;
+    height: 14px;
+    border-radius: 3px;
+  }
+
+  .resize-handle-ne { top: -4px; right: -4px; cursor: nesw-resize; }
+  .resize-handle-nw { top: -4px; left: -4px; cursor: nwse-resize; }
+  .resize-handle-se { bottom: -4px; right: -4px; cursor: nwse-resize; }
+  .resize-handle-sw { bottom: -4px; left: -4px; cursor: nesw-resize; }
+
   @media (max-width: 1100px) {
     .interface-control-panel {
       max-width: 90vw;
@@ -455,6 +503,24 @@ function createPanel(style = {}) {
   Object.assign(
     panel.style,
     style
+  );
+
+  const panelContent =
+    document.createElement("div");
+
+  panel.appendChild(panelContent);
+
+  Object.defineProperty(
+    panel,
+    "innerHTML",
+    {
+      get() {
+        return panelContent.innerHTML;
+      },
+      set(value) {
+        panelContent.innerHTML = value;
+      }
+    }
   );
 
   document.body.appendChild(panel);
@@ -595,10 +661,10 @@ function makePanelDraggable(
         rect.top;
 
       panel.style.left =
-        `${rect.left}px`;
+        `${rect.left / interfaceScale}px`;
 
       panel.style.top =
-        `${rect.top}px`;
+        `${rect.top / interfaceScale}px`;
 
       panel.style.right = "auto";
       panel.style.bottom = "auto";
@@ -663,10 +729,10 @@ function makePanelDraggable(
         );
 
       panel.style.left =
-        `${nextLeft}px`;
+        `${nextLeft / interfaceScale}px`;
 
       panel.style.top =
-        `${nextTop}px`;
+        `${nextTop / interfaceScale}px`;
     }
   );
 
@@ -712,6 +778,261 @@ function makePanelDraggable(
   );
 }
 
+const RESIZE_HANDLE_DIRECTIONS = [
+  "n",
+  "s",
+  "e",
+  "w",
+  "ne",
+  "nw",
+  "se",
+  "sw"
+];
+
+const PANEL_MIN_WIDTH_PX = 220;
+const PANEL_MIN_HEIGHT_PX = 120;
+
+function makePanelResizable(panel) {
+  if (
+    !panel ||
+    panel.dataset.resizableReady === "true"
+  ) {
+    return;
+  }
+
+  panel.dataset.resizableReady = "true";
+
+  RESIZE_HANDLE_DIRECTIONS.forEach(
+    (direction) => {
+      const handle =
+        document.createElement("div");
+
+      handle.className =
+        `resize-handle resize-handle-${direction}`;
+
+      panel.appendChild(handle);
+
+      let resizing = false;
+      let pointerId = null;
+      let startX = 0;
+      let startY = 0;
+      let startRect = null;
+
+      handle.addEventListener(
+        "pointerdown",
+        (event) => {
+          if (event.button !== 0) {
+            return;
+          }
+
+          event.preventDefault();
+          event.stopPropagation();
+
+          startRect =
+            panel.getBoundingClientRect();
+
+          startX = event.clientX;
+          startY = event.clientY;
+
+          panel.style.left =
+            `${startRect.left / interfaceScale}px`;
+
+          panel.style.top =
+            `${startRect.top / interfaceScale}px`;
+
+          panel.style.width =
+            `${startRect.width / interfaceScale}px`;
+
+          panel.style.height =
+            `${startRect.height / interfaceScale}px`;
+
+          panel.style.right = "auto";
+          panel.style.bottom = "auto";
+          panel.style.maxWidth = "none";
+          panel.style.maxHeight = "none";
+          panel.style.transform = "none";
+
+          resizing = true;
+          pointerId = event.pointerId;
+
+          handle.classList.add(
+            "resize-handle-active"
+          );
+
+          panel.classList.add(
+            "panel-being-dragged"
+          );
+
+          controls.enabled = false;
+
+          handle.setPointerCapture(
+            pointerId
+          );
+        }
+      );
+
+      handle.addEventListener(
+        "pointermove",
+        (event) => {
+          if (
+            !resizing ||
+            event.pointerId !== pointerId
+          ) {
+            return;
+          }
+
+          event.preventDefault();
+          event.stopPropagation();
+
+          const deltaX =
+            event.clientX - startX;
+
+          const deltaY =
+            event.clientY - startY;
+
+          let width = startRect.width;
+          let height = startRect.height;
+          let left = startRect.left;
+          let top = startRect.top;
+
+          if (direction.includes("e")) {
+            width =
+              startRect.width + deltaX;
+
+            width =
+              Math.max(
+                PANEL_MIN_WIDTH_PX,
+                width
+              );
+
+            width =
+              Math.min(
+                width,
+                window.innerWidth -
+                left
+              );
+          }
+
+          if (direction.includes("w")) {
+            width =
+              startRect.width - deltaX;
+
+            width =
+              Math.max(
+                PANEL_MIN_WIDTH_PX,
+                width
+              );
+
+            width =
+              Math.min(
+                width,
+                startRect.right
+              );
+
+            left =
+              startRect.right - width;
+          }
+
+          if (direction.includes("s")) {
+            height =
+              startRect.height + deltaY;
+
+            height =
+              Math.max(
+                PANEL_MIN_HEIGHT_PX,
+                height
+              );
+
+            height =
+              Math.min(
+                height,
+                window.innerHeight -
+                top
+              );
+          }
+
+          if (direction.includes("n")) {
+            height =
+              startRect.height - deltaY;
+
+            height =
+              Math.max(
+                PANEL_MIN_HEIGHT_PX,
+                height
+              );
+
+            height =
+              Math.min(
+                height,
+                startRect.bottom
+              );
+
+            top =
+              startRect.bottom - height;
+          }
+
+          panel.style.left =
+            `${left / interfaceScale}px`;
+
+          panel.style.top =
+            `${top / interfaceScale}px`;
+
+          panel.style.width =
+            `${width / interfaceScale}px`;
+
+          panel.style.height =
+            `${height / interfaceScale}px`;
+        }
+      );
+
+      function finishPanelResize(event) {
+        if (
+          !resizing ||
+          event.pointerId !== pointerId
+        ) {
+          return;
+        }
+
+        event.preventDefault();
+        event.stopPropagation();
+
+        resizing = false;
+
+        handle.classList.remove(
+          "resize-handle-active"
+        );
+
+        panel.classList.remove(
+          "panel-being-dragged"
+        );
+
+        if (
+          handle.hasPointerCapture(
+            pointerId
+          )
+        ) {
+          handle.releasePointerCapture(
+            pointerId
+          );
+        }
+
+        pointerId = null;
+        controls.enabled = true;
+      }
+
+      handle.addEventListener(
+        "pointerup",
+        finishPanelResize
+      );
+
+      handle.addEventListener(
+        "pointercancel",
+        finishPanelResize
+      );
+    }
+  );
+}
+
 function keepDraggablePanelInsideWindow(
   panel
 ) {
@@ -754,10 +1075,10 @@ function keepDraggablePanelInsideWindow(
     nextTop !== rect.top
   ) {
     panel.style.left =
-      `${nextLeft}px`;
+      `${nextLeft / interfaceScale}px`;
 
     panel.style.top =
-      `${nextTop}px`;
+      `${nextTop / interfaceScale}px`;
 
     panel.style.right = "auto";
     panel.style.bottom = "auto";
@@ -1599,6 +1920,10 @@ applyInterfaceScale(
 
 for (const item of managedPanels) {
   makePanelDraggable(
+    item.panel
+  );
+
+  makePanelResizable(
     item.panel
   );
 }
@@ -5314,6 +5639,10 @@ enhancedProfileVisibilityButton.addEventListener(
 makePanelDraggable(
   enhancedRouteProfilePanel,
   "拖動剖面圖 (Drag Profile)"
+);
+
+makePanelResizable(
+  enhancedRouteProfilePanel
 );
 
 // ======================================================
