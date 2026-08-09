@@ -480,7 +480,7 @@ function stopPanelEvents(panel) {
 }
 
 const BILINGUAL_TEXT_PATTERN =
-  /([\u3000-\u303F\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF\uFF00-\uFF19\uFF1B-\uFF5B\uFF5D-\uFFEF]+)\s*\(([^()<>]+)\)/g;
+  /([\u3000-\u303F\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF\uFF00-\uFF19\uFF1B-\uFF5B\uFF5D-\uFFEF](?:[\u3000-\u303F\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF\uFF00-\uFF19\uFF1B-\uFF5B\uFF5D-\uFFEF]|\s)*)\s*\(([^()<>]+)\)/g;
 
 function wrapBilingualText(html) {
   return html.replace(
@@ -3861,19 +3861,19 @@ function showCoordinateInformation(
 
     <hr class="panel-divider">
 
-    投影 X (Projected X)：
+    <span class="lang-zh">投影 X</span><span class="lang-en">Projected X</span>：
     ${point.projectedXMeters.toFixed(2)}
     m<br>
 
-    投影 Y (Projected Y)：
+    <span class="lang-zh">投影 Y</span><span class="lang-en">Projected Y</span>：
     ${point.projectedYMeters.toFixed(2)}
     m<br>
 
-    局部 X (Local X)：
+    <span class="lang-zh">局部 X</span><span class="lang-en">Local X</span>：
     ${point.localXKm.toFixed(3)}
     km<br>
 
-    局部 Z (Local Z)：
+    <span class="lang-zh">局部 Z</span><span class="lang-en">Local Z</span>：
     ${point.localZKm.toFixed(3)}
     km<br>
 
@@ -5227,16 +5227,16 @@ enhancedRouteProfilePanel.innerHTML = wrapBilingualText(`
   </div>
 
   <div class="enhanced-marker-legend">
-    紅色標記：最大坡度／不安全路段
+    紅色標記 (Red Marker)：最大坡度／不安全路段
     (Maximum Slope / Unsafe Section)<br>
 
-    綠色標記：最大爬升
+    綠色標記 (Green Marker)：最大爬升
     (Maximum Ascent)<br>
 
-    淡藍色標記：最大下降
+    淡藍色標記 (Light Blue Marker)：最大下降
     (Maximum Descent)<br>
 
-    黃色標記：高程突然變化
+    黃色標記 (Yellow Marker)：高程突然變化
     (Sudden Elevation Change)<br>
 
     點擊標記可查看該位置資料。
@@ -7740,17 +7740,13 @@ updateMissionPanel = function (
       路線分段顏色
       (Route Segment Colors)：<br>
 
-      綠色：0–5° 安全
-      (Green: Safe)<br>
+      <span class="lang-zh">綠色</span><span class="lang-en">Green</span>：0–5° <span class="lang-zh">安全</span><span class="lang-en">Safe</span><br>
 
-      黃綠色：5–10° 可通行
-      (Yellow-Green: Passable)<br>
+      <span class="lang-zh">黃綠色</span><span class="lang-en">Yellow-Green</span>：5–10° <span class="lang-zh">可通行</span><span class="lang-en">Passable</span><br>
 
-      橙色：10–15° 警告
-      (Orange: Warning)<br>
+      <span class="lang-zh">橙色</span><span class="lang-en">Orange</span>：10–15° <span class="lang-zh">警告</span><span class="lang-en">Warning</span><br>
 
-      紅色：&gt;15° 不安全
-      (Red: Unsafe)
+      <span class="lang-zh">紅色</span><span class="lang-en">Red</span>：&gt;15° <span class="lang-zh">不安全</span><span class="lang-en">Unsafe</span>
     </span>
   `);
 };
