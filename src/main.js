@@ -386,6 +386,7 @@ interfaceStyle.textContent = `
     font-family: Arial, sans-serif;
     font-size: 12px;
     user-select: none;
+    zoom: var(--interface-scale);
   }
 
   .interface-control-row {
@@ -416,6 +417,7 @@ interfaceStyle.textContent = `
     cursor: grab;
     user-select: none;
     touch-action: none;
+    pointer-events: auto;
     font-size: 11px;
     line-height: 1.2;
   }
