@@ -1392,7 +1392,7 @@ coordinateSearchPanel.innerHTML = wrapBilingualText(`
       id="search-coordinate-button"
       class="interface-button"
     >
-      搜尋位置 (Search)
+      設定點 (Set a Point)
     </button>
 
     <button
@@ -1406,7 +1406,7 @@ coordinateSearchPanel.innerHTML = wrapBilingualText(`
       id="set-goal-coordinate-button"
       class="interface-button"
     >
-      設為終點 (Set Goal)
+      設為終點 (Set Destination)
     </button>
 
     <button
@@ -2510,6 +2510,7 @@ function createTerrain(
   updateCenterCoordinatePanel();
   updateElevationLegend();
   showMissionInstructions();
+  showCoordinateInformation();
   createNamedPointMarker();
 }
 
@@ -3251,8 +3252,8 @@ function updateElevationLegend() {
     legendHtml +=
       createLegendRow(
         colorHexValues[index],
-        `${startElevation.toFixed(0)} ～ ` +
-        `${endElevation.toFixed(0)} m`
+        `${formatKm(startElevation)} ～ ` +
+        `${formatKm(endElevation)} km`
       );
   }
 
@@ -3430,16 +3431,16 @@ function updateStatusPanel() {
     <br>
 
     高程範圍 (Elevation Range)：
-    ${minHeightMeters.toFixed(1)} ～
-    ${maxHeightMeters.toFixed(1)}
-    m
+    ${formatKm(minHeightMeters)} ～
+    ${formatKm(maxHeightMeters)}
+    km
 
     ｜地形高差 (Elevation Difference)：
-    ${(
+    ${formatKm(
       maxHeightMeters -
       minHeightMeters
-    ).toFixed(1)}
-    m
+    )}
+    km
 
     <br>
 
@@ -3525,16 +3526,9 @@ function updateCenterCoordinatePanel() {
       Number.isFinite(
         centerElevationMeters
       )
-        ? centerElevationMeters.toFixed(1)
+        ? formatKm(centerElevationMeters) + " km"
         : "無資料 (No Data)"
     }
-    m<br>
-
-    <span style="color:#aaaaaa">
-      Local Center：
-      X = 0.000 km，
-      Z = 0.000 km
-    </span>
   `);
 }
 
@@ -3619,10 +3613,6 @@ function executeCoordinateAction(action) {
     return;
   }
 
-  showCoordinateInformation(
-    point
-  );
-
   placeMarkerOnSurface(
     clickMarker,
     point
@@ -3639,6 +3629,8 @@ function executeCoordinateAction(action) {
       point
     );
 
+    showCoordinateInformation();
+
     showCoordinateSearchMessage(
       `已設定起點 (Start Point Set)：` +
       `${point.latitudeDegrees.toFixed(6)}°, ` +
@@ -3654,6 +3646,8 @@ function executeCoordinateAction(action) {
       point
     );
 
+    showCoordinateInformation();
+
     showCoordinateSearchMessage(
       `已設定終點 (Goal Point Set)：` +
       `${point.latitudeDegrees.toFixed(6)}°, ` +
@@ -3666,7 +3660,7 @@ function executeCoordinateAction(action) {
 
   showCoordinateSearchMessage(
     `已找到位置，高程 (Location Found, Elevation)：` +
-    `${point.elevationMeters.toFixed(1)} m`,
+    `${formatKm(point.elevationMeters)} km`,
     "#67d9ff"
   );
 }
@@ -3959,10 +3953,6 @@ function handleTerrainClick(event) {
       point
     );
 
-  showCoordinateInformation(
-    correctedPoint
-  );
-
   placeMarkerOnSurface(
     clickMarker,
     correctedPoint
@@ -3989,6 +3979,8 @@ function handleTerrainClick(event) {
 
     startMarker.visible = true;
 
+    showCoordinateInformation();
+
     updateMissionWaitingPanel(
       "start"
     );
@@ -4005,6 +3997,8 @@ function handleTerrainClick(event) {
   );
 
   goalMarker.visible = true;
+
+  showCoordinateInformation();
 
   buildAndAnalyzeRoute();
 }
@@ -4178,14 +4172,21 @@ function placeMarkerOnSurface(
   );
 }
 
-function showCoordinateInformation(
+function formatCoordinatePanelPoint(
+  title,
   point
 ) {
-  coordinatePanel.innerHTML = wrapBilingualText(`
-    <strong>
-      月面實際座標
-      (Lunar Surface Coordinates)
-    </strong><br>
+  if (!point) {
+    return `
+      <strong>${title}</strong><br>
+
+      尚未設定
+      (Not Set)
+    `;
+  }
+
+  return `
+    <strong>${title}</strong><br>
 
     經度 (Longitude)：
     ${point.longitudeDegrees.toFixed(6)}°<br>
@@ -4194,26 +4195,31 @@ function showCoordinateInformation(
     ${point.latitudeDegrees.toFixed(6)}°<br>
 
     絕對高程 (Absolute Elevation)：
-    ${point.elevationMeters.toFixed(1)}
-    m
+    ${formatKm(point.elevationMeters)}
+    km
+  `;
+}
+
+function showCoordinateInformation() {
+  coordinatePanel.innerHTML = wrapBilingualText(`
+    <strong>
+      月面實際座標
+      (Lunar Surface Coordinates)
+    </strong><br>
+
+    ${formatCoordinatePanelPoint(
+      "起點 (Start Point)",
+      startPoint
+    )}
 
     <hr class="panel-divider">
 
-    <span class="lang-zh">投影 X</span><span class="lang-en">Projected X</span>：
-    ${point.projectedXMeters.toFixed(2)}
-    m<br>
+    ${formatCoordinatePanelPoint(
+      "終點 (Goal Point)",
+      goalPoint
+    )}
 
-    <span class="lang-zh">投影 Y</span><span class="lang-en">Projected Y</span>：
-    ${point.projectedYMeters.toFixed(2)}
-    m<br>
-
-    <span class="lang-zh">局部 X</span><span class="lang-en">Local X</span>：
-    ${point.localXKm.toFixed(3)}
-    km<br>
-
-    <span class="lang-zh">局部 Z</span><span class="lang-en">Local Z</span>：
-    ${point.localZKm.toFixed(3)}
-    km<br>
+    <hr class="panel-divider">
 
     <span style="color:#aaaaaa">
       CRS：
@@ -4226,7 +4232,7 @@ function showCoordinateInformation(
       ${CENTRAL_MERIDIAN_DEGREES}°<br>
 
       Elevation Datum：
-      Lunar Datum 0 m
+      Lunar Datum 0 km
     </span>
   `);
 }
@@ -4560,38 +4566,39 @@ function updateMissionPanel(
     水平距離
     (Horizontal Distance)：
     <strong>
-      ${analysis.horizontalDistanceMeters.toFixed(1)}
-      公尺 (m)
+      ${formatKm(analysis.horizontalDistanceMeters)}
+      km
     </strong><br>
 
     地表路徑距離
     (Surface Path Distance)：
     <strong>
-      ${analysis.surfaceDistanceMeters.toFixed(1)}
-      公尺 (m)
+      ${formatKm(analysis.surfaceDistanceMeters)}
+      km
     </strong><br>
 
     淨高程變化
     (Net Elevation Change)：
     <strong>
       ${formatSignedNumber(
-        analysis.netElevationChangeMeters
+        analysis.netElevationChangeMeters / 1000,
+        3
       )}
-      公尺 (m)
+      km
     </strong><br>
 
     累積爬升
     (Cumulative Ascent)：
     <strong>
-      ${analysis.cumulativeAscentMeters.toFixed(1)}
-      公尺 (m)
+      ${formatKm(analysis.cumulativeAscentMeters)}
+      km
     </strong><br>
 
     累積下降
     (Cumulative Descent)：
     <strong>
-      ${analysis.cumulativeDescentMeters.toFixed(1)}
-      公尺 (m)
+      ${formatKm(analysis.cumulativeDescentMeters)}
+      km
     </strong><br>
 
     平均坡度
@@ -4604,12 +4611,6 @@ function updateMissionPanel(
     (Maximum Slope)：
     <strong>
       ${analysis.maximumSlopeDegrees.toFixed(2)}°
-    </strong><br>
-
-    路線取樣點數
-    (Route Sample Count)：
-    <strong>
-      ${analysis.sampleCount}
     </strong><br>
 
     <br>
@@ -4704,8 +4705,8 @@ function formatMissionPoint(
 
     絕對高程
     (Absolute Elevation)：
-    ${point.elevationMeters.toFixed(1)}
-    公尺 (m)
+    ${formatKm(point.elevationMeters)}
+    km
   `;
 }
 
@@ -5089,6 +5090,7 @@ function resetMissionRoute() {
 
   removeRouteLine();
   showMissionInstructions();
+  showCoordinateInformation();
 }
 
 function removeRouteLine() {
@@ -5128,9 +5130,9 @@ function showMissionInstructions() {
 
     <br>
 
-    搜尋位置 (Search Location)<br>
+    設定點 (Set a Point)<br>
     設為起點 (Set as Start)<br>
-    設為終點 (Set as Goal)<br>
+    設為終點 (Set as Destination)<br>
 
     <br>
 
@@ -5206,6 +5208,18 @@ function getStatusStyle(
 // ======================================================
 // 35. 工具函式（Utility Functions）
 // ======================================================
+
+function formatKm(
+  meters,
+  digits = 3
+) {
+  return (
+    meters /
+    1000
+  ).toFixed(
+    digits
+  );
+}
 
 function formatSignedNumber(
   value,
@@ -5504,7 +5518,7 @@ const enhancedRouteProfilePanel =
 enhancedRouteProfilePanel.innerHTML = wrapBilingualText(`
   <strong>
     路線高程剖面圖
-    (Route Elevation Profile)
+    (Route Elevation Cross Section)
   </strong><br>
 
   <span style="color:#aaaaaa">
@@ -5599,7 +5613,7 @@ const enhancedProfileInformation =
 // 加入原本的介面控制系統
 managedPanels.push({
   key: "profile",
-  label: "剖面 (Profile)",
+  label: "剖面 (Cross Section)",
   panel: enhancedRouteProfilePanel
 });
 
@@ -5614,7 +5628,7 @@ enhancedProfileVisibilityButton.dataset.panelKey =
 
 setLocalizedHtml(
   enhancedProfileVisibilityButton,
-  "剖面 (Profile)"
+  "剖面 (Cross Section)"
 );
 
 const interfaceControlRows =
@@ -5651,7 +5665,7 @@ enhancedProfileVisibilityButton.addEventListener(
 
 makePanelDraggable(
   enhancedRouteProfilePanel,
-  "拖動剖面圖 (Drag Profile)"
+  "拖動剖面圖 (Drag Cross Section)"
 );
 
 makePanelResizable(
@@ -6281,9 +6295,9 @@ function createEnhancedRouteHazardMarkers(
           Math.max(
             0,
             analysis.maximumAscentMeters
-          ),
-          2
-        )} m`
+          ) / 1000,
+          3
+        )} km`
     },
     usedMarkerKeys
   );
@@ -6321,9 +6335,9 @@ function createEnhancedRouteHazardMarkers(
           Math.min(
             0,
             analysis.maximumDescentMeters
-          ),
-          2
-        )} m`
+          ) / 1000,
+          3
+        )} km`
     },
     usedMarkerKeys
   );
@@ -6421,9 +6435,9 @@ function createEnhancedRouteHazardMarkers(
           `(Segment Elevation Change)：` +
           `${formatSignedNumber(
             suddenPoint
-              .elevationDifferenceMeters,
-            2
-          )} m`
+              .elevationDifferenceMeters / 1000,
+            3
+          )} km`
       },
       usedMarkerKeys
     );
@@ -6522,8 +6536,8 @@ function showEnhancedHazardInformation(
 
     累積距離
     (Cumulative Distance)：
-    ${point.cumulativeDistanceMeters.toFixed(1)}
-    公尺 (m)<br>
+    ${formatKm(point.cumulativeDistanceMeters)}
+    km<br>
 
     緯度
     (Latitude)：
@@ -6535,16 +6549,16 @@ function showEnhancedHazardInformation(
 
     絕對高程
     (Absolute Elevation)：
-    ${point.elevationMeters.toFixed(1)}
-    公尺 (m)<br>
+    ${formatKm(point.elevationMeters)}
+    km<br>
 
     單段高程變化
     (Segment Elevation Change)：
     ${formatSignedNumber(
-      point.elevationDifferenceMeters,
-      2
+      point.elevationDifferenceMeters / 1000,
+      3
     )}
-    公尺 (m)
+    km
   `);
 
   placeMarkerOnSurface(
@@ -6618,10 +6632,6 @@ function selectNamedPointMarker() {
 
   longitudeInput.value =
     point.longitudeDegrees.toFixed(6);
-
-  showCoordinateInformation(
-    point
-  );
 
   placeMarkerOnSurface(
     clickMarker,
@@ -7305,7 +7315,7 @@ function drawEnhancedRouteProfile(
       5;
 
     context.fillText(
-      `${elevationValue.toFixed(0)} m`,
+      `${formatKm(elevationValue)} km`,
       margin.left - 8,
       y
     );
@@ -7335,12 +7345,7 @@ function drawEnhancedRouteProfile(
       6;
 
     const distanceLabel =
-      distanceValue >= 1000
-        ? `${(
-            distanceValue /
-            1000
-          ).toFixed(1)} km`
-        : `${distanceValue.toFixed(0)} m`;
+      `${formatKm(distanceValue, 2)} km`;
 
     context.fillText(
       distanceLabel,
@@ -7449,10 +7454,11 @@ function showEnhancedProfileSummary(
     最大坡度位置
     (Maximum Slope Position)：
     <strong>
-      ${maximumSlopePoint
-        .cumulativeDistanceMeters
-        .toFixed(1)}
-      公尺 (m)
+      ${formatKm(
+        maximumSlopePoint
+          .cumulativeDistanceMeters
+      )}
+      km
     </strong><br>
 
     最大坡度
@@ -7565,19 +7571,21 @@ function handleEnhancedProfilePointerMove(
     累積距離
     (Cumulative Distance)：
     <strong>
-      ${selectedSample
-        .cumulativeDistanceMeters
-        .toFixed(1)}
-      公尺 (m)
+      ${formatKm(
+        selectedSample
+          .cumulativeDistanceMeters
+      )}
+      km
     </strong>
 
     ｜絕對高程
     (Absolute Elevation)：
     <strong>
-      ${selectedSample
-        .elevationMeters
-        .toFixed(1)}
-      公尺 (m)
+      ${formatKm(
+        selectedSample
+          .elevationMeters
+      )}
+      km
     </strong><br>
 
     坡度
@@ -7597,10 +7605,10 @@ function handleEnhancedProfilePointerMove(
     (Segment Elevation Change)：
     ${formatSignedNumber(
       selectedSample
-        .elevationDifferenceMeters,
-      2
+        .elevationDifferenceMeters / 1000,
+      3
     )}
-    公尺 (m)<br>
+    km<br>
 
     緯度
     (Latitude)：
@@ -7867,6 +7875,8 @@ resetMissionRoute = function () {
   resetEnhancedRouteProfile();
 
   showMissionInstructions();
+
+  showCoordinateInformation();
 };
 
 // ======================================================
@@ -7927,10 +7937,6 @@ handleTerrainClick = function (
       point
     );
 
-  showCoordinateInformation(
-    correctedPoint
-  );
-
   placeMarkerOnSurface(
     clickMarker,
     correctedPoint
@@ -7959,6 +7965,8 @@ handleTerrainClick = function (
     startMarker.visible =
       true;
 
+    showCoordinateInformation();
+
     updateMissionWaitingPanel(
       "start"
     );
@@ -7976,6 +7984,8 @@ handleTerrainClick = function (
 
   goalMarker.visible =
     true;
+
+  showCoordinateInformation();
 
   buildAndAnalyzeRoute();
 };
@@ -8020,45 +8030,48 @@ updateMissionPanel = function (
     最大坡度位置
     (Maximum Slope Position)：
     <strong>
-      ${maximumSlopePoint
-        .cumulativeDistanceMeters
-        .toFixed(1)}
-      公尺 (m)
+      ${formatKm(
+        maximumSlopePoint
+          .cumulativeDistanceMeters
+      )}
+      km
     </strong><br>
 
     最大爬升區段
     (Maximum Ascent Segment)：
     <strong>
       ${formatSignedNumber(
-        analysis.maximumAscentMeters,
-        2
+        analysis.maximumAscentMeters / 1000,
+        3
       )}
-      公尺 (m)
+      km
     </strong>
 
     ｜位置
     (Position)：
-    ${maximumAscentPoint
-      .cumulativeDistanceMeters
-      .toFixed(1)}
-    m<br>
+    ${formatKm(
+      maximumAscentPoint
+        .cumulativeDistanceMeters
+    )}
+    km<br>
 
     最大下降區段
     (Maximum Descent Segment)：
     <strong>
       ${formatSignedNumber(
-        analysis.maximumDescentMeters,
-        2
+        analysis.maximumDescentMeters / 1000,
+        3
       )}
-      公尺 (m)
+      km
     </strong>
 
     ｜位置
     (Position)：
-    ${maximumDescentPoint
-      .cumulativeDistanceMeters
-      .toFixed(1)}
-    m<br>
+    ${formatKm(
+      maximumDescentPoint
+        .cumulativeDistanceMeters
+    )}
+    km<br>
 
     不安全區段
     (Unsafe Segments)：
