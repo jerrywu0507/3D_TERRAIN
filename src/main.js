@@ -5181,6 +5181,24 @@ function getEnhancedRouteSlopeColorCss(
   );
 }
 
+function getSlopeStatusLabel(
+  slopeDegrees
+) {
+  if (slopeDegrees < 5) {
+    return "安全 (Safe)";
+  }
+
+  if (slopeDegrees < 10) {
+    return "可通行 (Passable)";
+  }
+
+  if (slopeDegrees <= 15) {
+    return "警告 (Warning)";
+  }
+
+  return "不安全 (Unsafe)";
+}
+
 // ======================================================
 // 43. 路線分析（Route Analysis）
 // ======================================================
@@ -7087,13 +7105,9 @@ function handleEnhancedProfilePointerMove(
     ];
 
   const slopeStatus =
-    selectedSample.slopeDegrees < 5
-      ? "安全 (Safe)"
-      : selectedSample.slopeDegrees < 10
-        ? "可通行 (Passable)"
-        : selectedSample.slopeDegrees <= 15
-          ? "警告 (Warning)"
-          : "不安全 (Unsafe)";
+    getSlopeStatusLabel(
+      selectedSample.slopeDegrees
+    );
 
   enhancedProfileInformation.innerHTML = wrapBilingualText(`
     累積距離
