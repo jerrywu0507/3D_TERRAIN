@@ -4549,20 +4549,6 @@ function updateMissionPanel(
       (Rover Mission Route)
     </strong><br>
 
-    ${formatMissionPoint(
-      "起點 (Start Point)",
-      startPoint
-    )}
-
-    <hr class="panel-divider">
-
-    ${formatMissionPoint(
-      "終點 (Goal Point)",
-      goalPoint
-    )}
-
-    <hr class="panel-divider">
-
     水平距離
     (Horizontal Distance)：
     <strong>
@@ -4635,11 +4621,6 @@ function updateMissionWaitingPanel(
   const isStart =
     selectedType === "start";
 
-  const point =
-    isStart
-      ? startPoint
-      : goalPoint;
-
   missionPanel.innerHTML = wrapBilingualText(`
     <strong>
       月球車任務路線
@@ -4662,52 +4643,12 @@ function updateMissionWaitingPanel(
 
     <br><br>
 
-    ${formatMissionPoint(
-      isStart
-        ? "起點 (Start Point)"
-        : "終點 (Goal Point)",
-      point
-    )}
-
-    <br>
-
     ${
       isStart
         ? "請設定終點。(Please Set the Goal Point.)"
         : "請設定起點。(Please Set the Start Point.)"
     }
   `);
-}
-
-function formatMissionPoint(
-  title,
-  point
-) {
-  if (!point) {
-    return `
-      <strong>${title}</strong><br>
-
-      尚未設定
-      (Not Set)
-    `;
-  }
-
-  return `
-    <strong>${title}</strong><br>
-
-    緯度
-    (Latitude)：
-    ${point.latitudeDegrees.toFixed(6)}°<br>
-
-    經度
-    (Longitude)：
-    ${point.longitudeDegrees.toFixed(6)}°<br>
-
-    絕對高程
-    (Absolute Elevation)：
-    ${formatKm(point.elevationMeters)}
-    km
-  `;
 }
 
 // ======================================================
