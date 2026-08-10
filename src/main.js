@@ -6456,7 +6456,7 @@ function showEnhancedHazardInformation(
   const slopeDegrees =
     marker.userData.slopeDegrees;
 
-  coordinatePanel.innerHTML = wrapBilingualText(`
+  enhancedProfileInformation.innerHTML = wrapBilingualText(`
     <strong style="
       color:${getEnhancedRouteSlopeColorCss(
         slopeDegrees
@@ -7391,6 +7391,16 @@ function showEnhancedProfileSummary(
       analysis.maximumSlopeIndex
     ];
 
+  const maximumAscentPoint =
+    routeSamples[
+      analysis.maximumAscentIndex
+    ];
+
+  const maximumDescentPoint =
+    routeSamples[
+      analysis.maximumDescentIndex
+    ];
+
   enhancedProfileInformation.innerHTML = wrapBilingualText(`
     最大坡度位置
     (Maximum Slope Position)：
@@ -7400,19 +7410,63 @@ function showEnhancedProfileSummary(
           .cumulativeDistanceMeters
       )}
       km
-    </strong><br>
+    </strong>
 
-    最大坡度
+    ｜最大坡度
     (Maximum Slope)：
     <strong style="color:#ff5c6c">
       ${analysis.maximumSlopeDegrees.toFixed(2)}°
+    </strong><br>
+
+    最大爬升區段
+    (Maximum Ascent Segment)：
+    <strong>
+      ${formatSignedNumber(
+        analysis.maximumAscentMeters / 1000,
+        3
+      )}
+      km
     </strong>
 
-    ｜不安全區段數
+    ｜位置
+    (Position)：
+    ${formatKm(
+      maximumAscentPoint
+        .cumulativeDistanceMeters
+    )}
+    km<br>
+
+    最大下降區段
+    (Maximum Descent Segment)：
+    <strong>
+      ${formatSignedNumber(
+        analysis.maximumDescentMeters / 1000,
+        3
+      )}
+      km
+    </strong>
+
+    ｜位置
+    (Position)：
+    ${formatKm(
+      maximumDescentPoint
+        .cumulativeDistanceMeters
+    )}
+    km<br>
+
+    不安全區段數
     (Unsafe Segment Count)：
     <strong>
       ${analysis
         .dangerousSegmentIndices
+        .length}
+    </strong>
+
+    ｜高程突變點
+    (Sudden Elevation Changes)：
+    <strong>
+      ${analysis
+        .suddenChangeIndices
         .length}
     </strong>
   `);
@@ -7929,122 +7983,6 @@ handleTerrainClick = function (
   showCoordinateInformation();
 
   buildAndAnalyzeRoute();
-};
-
-// ======================================================
-// 54. 補充任務面板危險資訊（Extended Mission Panel）
-// ======================================================
-
-const originalEnhancedUpdateMissionPanel =
-  updateMissionPanel;
-
-updateMissionPanel = function (
-  analysis
-) {
-  originalEnhancedUpdateMissionPanel(
-    analysis
-  );
-
-  const maximumSlopePoint =
-    routeSamples[
-      analysis.maximumSlopeIndex
-    ];
-
-  const maximumAscentPoint =
-    routeSamples[
-      analysis.maximumAscentIndex
-    ];
-
-  const maximumDescentPoint =
-    routeSamples[
-      analysis.maximumDescentIndex
-    ];
-
-  missionPanel.innerHTML += wrapBilingualText(`
-    <hr class="panel-divider">
-
-    <strong>
-      路線危險點分析
-      (Route Hazard Analysis)
-    </strong><br>
-
-    最大坡度位置
-    (Maximum Slope Position)：
-    <strong>
-      ${formatKm(
-        maximumSlopePoint
-          .cumulativeDistanceMeters
-      )}
-      km
-    </strong><br>
-
-    最大爬升區段
-    (Maximum Ascent Segment)：
-    <strong>
-      ${formatSignedNumber(
-        analysis.maximumAscentMeters / 1000,
-        3
-      )}
-      km
-    </strong>
-
-    ｜位置
-    (Position)：
-    ${formatKm(
-      maximumAscentPoint
-        .cumulativeDistanceMeters
-    )}
-    km<br>
-
-    最大下降區段
-    (Maximum Descent Segment)：
-    <strong>
-      ${formatSignedNumber(
-        analysis.maximumDescentMeters / 1000,
-        3
-      )}
-      km
-    </strong>
-
-    ｜位置
-    (Position)：
-    ${formatKm(
-      maximumDescentPoint
-        .cumulativeDistanceMeters
-    )}
-    km<br>
-
-    不安全區段
-    (Unsafe Segments)：
-    <strong style="color:#ff5c5c">
-      ${analysis
-        .dangerousSegmentIndices
-        .length}
-    </strong><br>
-
-    高程突變點
-    (Sudden Elevation Changes)：
-    <strong style="color:#ffd84a">
-      ${analysis
-        .suddenChangeIndices
-        .length}
-    </strong>
-
-    <hr class="panel-divider">
-
-    <span style="color:#aaaaaa">
-      路線分段顏色
-      (Route Segment Colors)：<br>
-
-      <span class="lang-zh">綠色</span><span class="lang-en">Green</span>：0–5° <span class="lang-zh">安全</span><span class="lang-en">Safe</span><br>
-
-      <span class="lang-zh">黃綠色</span><span class="lang-en">Yellow-Green</span>：5–10° <span class="lang-zh">可通行</span><span class="lang-en">Passable</span><br>
-
-      <span class="lang-zh">橙色</span><span class="lang-en">Orange</span>：10–15° <span class="lang-zh">警告</span><span class="lang-en">Warning</span><br>
-
-      <span class="lang-zh">紅色</span><span class="lang-en">Red</span>：&gt;15° <span class="lang-zh">不安全</span><span class="lang-en">Unsafe</span>
-    </span>
-  `);
 };
 
 // 初始顯示空白剖面圖
