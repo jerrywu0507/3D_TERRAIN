@@ -1115,20 +1115,14 @@ function resetDraggablePanelPositions() {
 // 9. DEM 狀態面板（DEM Status Panel）
 // ======================================================
 
-let statusPanel = document.querySelector("#status");
+const statusPanel = createPanel({
+  top: "14px",
+  left: "14px",
+  maxWidth: "960px",
+  pointerEvents: "none"
+});
 
-if (!statusPanel) {
-  statusPanel = createPanel({
-    top: "14px",
-    left: "14px",
-    maxWidth: "960px",
-    pointerEvents: "none"
-  });
-
-  statusPanel.id = "status";
-} else {
-  statusPanel.classList.add("interface-panel");
-}
+statusPanel.id = "status";
 
 statusPanel.innerHTML = wrapBilingualText(`
   <strong>
