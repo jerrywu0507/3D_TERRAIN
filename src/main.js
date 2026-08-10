@@ -1164,29 +1164,6 @@ coordinatePanel.innerHTML = wrapBilingualText(`
 `);
 
 // ======================================================
-// 11. 任務區中心座標面板（Mission Area Center Panel）
-// ======================================================
-
-const centerCoordinatePanel = createPanel({
-  top: "14px",
-  left: "50%",
-  transform: "translateX(-50%)",
-  width: "380px",
-  textAlign: "center",
-  pointerEvents: "none"
-});
-
-centerCoordinatePanel.innerHTML = wrapBilingualText(`
-  <strong>
-    任務區中心座標
-    (Mission Area Center Coordinates)
-  </strong><br>
-
-  正在計算中心座標
-  (Calculating Center Coordinates)...
-`);
-
-// ======================================================
 // 12. 任務路線面板（Mission Route Panel）
 // ======================================================
 
@@ -1200,21 +1177,21 @@ const missionPanel = createPanel({
 });
 
 // ======================================================
-// 13. 坡度圖層面板（Slope Layer Panel）
+// 13. 圖層面板（Layers Panel — Slope & Elevation Bands）
 // ======================================================
 
-const slopePanel = createPanel({
+const layersPanel = createPanel({
   right: "14px",
   bottom: "14px",
-  width: "300px",
-  maxHeight: "45vh",
+  width: "320px",
+  maxHeight: "60vh",
   overflowY: "auto",
   zIndex: "30",
   pointerEvents: "auto",
   userSelect: "none"
 });
 
-slopePanel.innerHTML = wrapBilingualText(`
+layersPanel.innerHTML = wrapBilingualText(`
   <div class="layer-header">
     <strong>
       坡度圖層
@@ -1256,38 +1233,9 @@ slopePanel.innerHTML = wrapBilingualText(`
       ">20° 深紅色 (Dark Red)"
     )}
   </div>
-`);
 
-stopPanelEvents(slopePanel);
+  <hr class="panel-divider">
 
-const slopeToggle =
-  document.querySelector("#slope-toggle");
-
-slopeToggle.addEventListener(
-  "change",
-  () => {
-    setSlopeLayerEnabled(
-      slopeToggle.checked
-    );
-  }
-);
-
-// ======================================================
-// 14. 高程色帶面板（Elevation Band Panel）
-// ======================================================
-
-const elevationPanel = createPanel({
-  right: "328px",
-  bottom: "14px",
-  width: "330px",
-  maxHeight: "45vh",
-  overflowY: "auto",
-  zIndex: "30",
-  pointerEvents: "auto",
-  userSelect: "none"
-});
-
-elevationPanel.innerHTML = wrapBilingualText(`
   <div class="layer-header">
     <strong>
       等高色帶圖層
@@ -1312,13 +1260,25 @@ elevationPanel.innerHTML = wrapBilingualText(`
   </div>
 `);
 
-stopPanelEvents(elevationPanel);
+stopPanelEvents(layersPanel);
+
+const slopeToggle =
+  document.querySelector("#slope-toggle");
 
 const elevationToggle =
   document.querySelector("#elevation-toggle");
 
 const elevationLegend =
   document.querySelector("#elevation-legend");
+
+slopeToggle.addEventListener(
+  "change",
+  () => {
+    setSlopeLayerEnabled(
+      slopeToggle.checked
+    );
+  }
+);
 
 elevationToggle.addEventListener(
   "change",
@@ -1526,11 +1486,6 @@ const managedPanels = [
     panel: statusPanel
   },
   {
-    key: "center",
-    label: "中心 (Center)",
-    panel: centerCoordinatePanel
-  },
-  {
     key: "coordinate",
     label: "座標 (Coordinates)",
     panel: coordinatePanel
@@ -1546,14 +1501,9 @@ const managedPanels = [
     panel: missionPanel
   },
   {
-    key: "elevation",
-    label: "高程 (Elevation)",
-    panel: elevationPanel
-  },
-  {
-    key: "slope",
-    label: "坡度 (Slope)",
-    panel: slopePanel
+    key: "layers",
+    label: "圖層 (Layers)",
+    panel: layersPanel
   }
 ];
 
@@ -2507,7 +2457,6 @@ function createTerrain(
   updateSceneHelpers();
   updateCamera();
   updateStatusPanel();
-  updateCenterCoordinatePanel();
   updateElevationLegend();
   showMissionInstructions();
   showCoordinateInformation();
@@ -3409,6 +3358,33 @@ function updateStatusPanel() {
     pixelSizeYMeters
   } = terrainMetadata;
 
+  const centerElevationMeters =
+    sampleElevationBilinear(
+      0,
+      0
+    );
+
+  const centerProjected =
+    localToProjectedCoordinates(
+      0,
+      0
+    );
+
+  const centerMoonRadiusMeters =
+    Number(
+      terrainMetadata
+        .moonRadiusMeters ??
+      DEFAULT_MOON_RADIUS_METERS
+    );
+
+  const centerGeographic =
+    inverseSouthPolarStereographic(
+      centerProjected.x,
+      centerProjected.y,
+      centerMoonRadiusMeters,
+      CENTRAL_MERIDIAN_DEGREES
+    );
+
   statusPanel.innerHTML = wrapBilingualText(`
     <strong>
       Artemis III／Nobile Rim 2 數位高程模型
@@ -3444,6 +3420,23 @@ function updateStatusPanel() {
 
     <br>
 
+    任務區中心座標 (Mission Area Center)：
+    ${centerGeographic.latitudeDegrees.toFixed(6)}°,
+    ${normalizeLongitude(
+      centerGeographic.longitudeDegrees
+    ).toFixed(6)}°
+
+    ｜中心高程 (Center Elevation)：
+    ${
+      Number.isFinite(
+        centerElevationMeters
+      )
+        ? formatKm(centerElevationMeters) + " km"
+        : "無資料 (No Data)"
+    }
+
+    <br>
+
     NoData：
     ${demCleaningStatistics.invalidValues}
 
@@ -3472,63 +3465,6 @@ function updateStatusPanel() {
     U：顯示／隱藏介面 (Show/Hide Interface)｜
     [ / ]：縮小／放大介面 (Zoom Interface Out/In)｜
     面板上方把手 (Drag Handle)：自由拖動 (Free Drag)
-  `);
-}
-
-// ======================================================
-// 25. 任務區中心座標（Mission Area Center）
-// ======================================================
-
-function updateCenterCoordinatePanel() {
-  const centerElevationMeters =
-    sampleElevationBilinear(
-      0,
-      0
-    );
-
-  const projected =
-    localToProjectedCoordinates(
-      0,
-      0
-    );
-
-  const moonRadiusMeters =
-    Number(
-      terrainMetadata
-        .moonRadiusMeters ??
-      DEFAULT_MOON_RADIUS_METERS
-    );
-
-  const geographic =
-    inverseSouthPolarStereographic(
-      projected.x,
-      projected.y,
-      moonRadiusMeters,
-      CENTRAL_MERIDIAN_DEGREES
-    );
-
-  centerCoordinatePanel.innerHTML = wrapBilingualText(`
-    <strong>
-      任務區中心座標
-      (Mission Area Center Coordinates)
-    </strong><br>
-
-    中心緯度 (Center Latitude)：
-    ${geographic.latitudeDegrees.toFixed(6)}°<br>
-
-    中心經度 (Center Longitude)：
-    ${normalizeLongitude(
-      geographic.longitudeDegrees
-    ).toFixed(6)}°<br>
-
-    中心高程 (Center Elevation)：
-    ${
-      Number.isFinite(
-        centerElevationMeters
-      )
-        ? formatKm(centerElevationMeters) + " km"
-        : "無資料 (No Data)"
-    }
   `);
 }
 
@@ -3933,76 +3869,6 @@ renderer.domElement.addEventListener(
   }
 );
 
-function handleTerrainClick(event) {
-  if (
-    !terrain ||
-    !terrainMetadata
-  ) {
-    return;
-  }
-
-  const point =
-    pickTerrainPoint(event);
-
-  if (!point) {
-    return;
-  }
-
-  const correctedPoint =
-    rebuildPointUsingDemHeight(
-      point
-    );
-
-  placeMarkerOnSurface(
-    clickMarker,
-    correctedPoint
-  );
-
-  clickMarker.visible = true;
-
-  if (
-    !startPoint ||
-    (
-      startPoint &&
-      goalPoint
-    )
-  ) {
-    resetMissionRoute();
-
-    startPoint =
-      correctedPoint;
-
-    placeMarkerOnSurface(
-      startMarker,
-      startPoint
-    );
-
-    startMarker.visible = true;
-
-    showCoordinateInformation();
-
-    updateMissionWaitingPanel(
-      "start"
-    );
-
-    return;
-  }
-
-  goalPoint =
-    correctedPoint;
-
-  placeMarkerOnSurface(
-    goalMarker,
-    goalPoint
-  );
-
-  goalMarker.visible = true;
-
-  showCoordinateInformation();
-
-  buildAndAnalyzeRoute();
-}
-
 function pickTerrainPoint(event) {
   const rect =
     renderer.domElement
@@ -4235,304 +4101,6 @@ function showCoordinateInformation() {
       Lunar Datum 0 km
     </span>
   `);
-}
-
-// ======================================================
-// 29. 建立路線（Create Route）
-// ======================================================
-
-function buildAndAnalyzeRoute() {
-  if (
-    !startPoint ||
-    !goalPoint
-  ) {
-    return;
-  }
-
-  removeRouteLine();
-
-  const horizontalDistanceMeters =
-    Math.hypot(
-      (
-        goalPoint.localXKm -
-        startPoint.localXKm
-      ) *
-      1000,
-
-      (
-        goalPoint.localZKm -
-        startPoint.localZKm
-      ) *
-      1000
-    );
-
-  const segmentCount =
-    Math.max(
-      2,
-      Math.ceil(
-        horizontalDistanceMeters /
-        ROUTE_SAMPLE_INTERVAL_METERS
-      )
-    );
-
-  routeSamples = [];
-
-  for (
-    let index = 0;
-    index <= segmentCount;
-    index += 1
-  ) {
-    const t =
-      index /
-      segmentCount;
-
-    const localXKm =
-      THREE.MathUtils.lerp(
-        startPoint.localXKm,
-        goalPoint.localXKm,
-        t
-      );
-
-    const localZKm =
-      THREE.MathUtils.lerp(
-        startPoint.localZKm,
-        goalPoint.localZKm,
-        t
-      );
-
-    const elevationMeters =
-      sampleElevationBilinear(
-        localXKm,
-        localZKm
-      );
-
-    if (
-      !Number.isFinite(
-        elevationMeters
-      )
-    ) {
-      continue;
-    }
-
-    routeSamples.push(
-      createPointDataFromWorldPoint(
-        new THREE.Vector3(
-          localXKm,
-
-          (
-            elevationMeters /
-            1000
-          ) *
-          VERTICAL_EXAGGERATION,
-
-          localZKm
-        )
-      )
-    );
-  }
-
-  if (
-    routeSamples.length < 2
-  ) {
-    missionPanel.innerHTML = wrapBilingualText(`
-      <strong>
-        路線建立失敗
-        (Route Creation Failed)
-      </strong><br>
-
-      沿線沒有足夠的有效高程資料。
-      (Insufficient Valid Elevation Data Along the Route.)
-    `);
-
-    return;
-  }
-
-  const linePoints =
-    routeSamples.map(
-      (sample) =>
-        new THREE.Vector3(
-          sample.localXKm,
-
-          (
-            sample.elevationMeters /
-            1000
-          ) *
-          VERTICAL_EXAGGERATION +
-          ROUTE_SURFACE_OFFSET_KM,
-
-          sample.localZKm
-        )
-    );
-
-  const routeGeometry =
-    new THREE.BufferGeometry()
-      .setFromPoints(
-        linePoints
-      );
-
-  const routeMaterial =
-    new THREE.LineBasicMaterial({
-      color: 0xffffff,
-      depthTest: true,
-      depthWrite: false
-    });
-
-  routeLine =
-    new THREE.Line(
-      routeGeometry,
-      routeMaterial
-    );
-
-  routeLine.renderOrder = 4;
-
-  scene.add(routeLine);
-
-  updateMissionPanel(
-    analyzeRoute(
-      routeSamples
-    )
-  );
-}
-
-// ======================================================
-// 30. 路線分析（Route Analysis）
-// ======================================================
-
-function analyzeRoute(samples) {
-  let surfaceDistanceMeters = 0;
-  let cumulativeAscentMeters = 0;
-  let cumulativeDescentMeters = 0;
-
-  let maximumSlopeDegrees = 0;
-  let slopeSumDegrees = 0;
-  let slopeCount = 0;
-
-  for (
-    let index = 1;
-    index < samples.length;
-    index += 1
-  ) {
-    const previous =
-      samples[index - 1];
-
-    const current =
-      samples[index];
-
-    const horizontalDistanceMeters =
-      Math.hypot(
-        (
-          current.localXKm -
-          previous.localXKm
-        ) *
-        1000,
-
-        (
-          current.localZKm -
-          previous.localZKm
-        ) *
-        1000
-      );
-
-    const elevationDifferenceMeters =
-      current.elevationMeters -
-      previous.elevationMeters;
-
-    surfaceDistanceMeters +=
-      Math.hypot(
-        horizontalDistanceMeters,
-        elevationDifferenceMeters
-      );
-
-    if (
-      elevationDifferenceMeters >
-      0
-    ) {
-      cumulativeAscentMeters +=
-        elevationDifferenceMeters;
-    } else {
-      cumulativeDescentMeters +=
-        Math.abs(
-          elevationDifferenceMeters
-        );
-    }
-
-    if (
-      horizontalDistanceMeters >
-      0
-    ) {
-      const slopeDegrees =
-        THREE.MathUtils.radToDeg(
-          Math.atan2(
-            Math.abs(
-              elevationDifferenceMeters
-            ),
-            horizontalDistanceMeters
-          )
-        );
-
-      maximumSlopeDegrees =
-        Math.max(
-          maximumSlopeDegrees,
-          slopeDegrees
-        );
-
-      slopeSumDegrees +=
-        slopeDegrees;
-
-      slopeCount += 1;
-    }
-  }
-
-  const first =
-    samples[0];
-
-  const last =
-    samples[
-      samples.length - 1
-    ];
-
-  return {
-    horizontalDistanceMeters:
-      Math.hypot(
-        (
-          last.localXKm -
-          first.localXKm
-        ) *
-        1000,
-
-        (
-          last.localZKm -
-          first.localZKm
-        ) *
-        1000
-      ),
-
-    surfaceDistanceMeters,
-
-    cumulativeAscentMeters,
-
-    cumulativeDescentMeters,
-
-    maximumSlopeDegrees,
-
-    averageSlopeDegrees:
-      slopeCount > 0
-        ? slopeSumDegrees /
-          slopeCount
-        : 0,
-
-    netElevationChangeMeters:
-      last.elevationMeters -
-      first.elevationMeters,
-
-    sampleCount:
-      samples.length,
-
-    status:
-      classifySlope(
-        maximumSlopeDegrees
-      )
-  };
 }
 
 function updateMissionPanel(
@@ -5019,35 +4587,6 @@ function normalizeLongitude(
 // ======================================================
 // 33. 路線清除與說明（Route Reset and Instructions）
 // ======================================================
-
-function resetMissionRoute() {
-  startPoint = null;
-  goalPoint = null;
-
-  routeSamples = [];
-
-  startMarker.visible = false;
-  goalMarker.visible = false;
-
-  removeRouteLine();
-  showMissionInstructions();
-  showCoordinateInformation();
-}
-
-function removeRouteLine() {
-  if (!routeLine) {
-    return;
-  }
-
-  scene.remove(
-    routeLine
-  );
-
-  routeLine.geometry.dispose();
-  routeLine.material.dispose();
-
-  routeLine = null;
-}
 
 function showMissionInstructions() {
   missionPanel.innerHTML = wrapBilingualText(`
@@ -5649,10 +5188,10 @@ function getEnhancedRouteSlopeColorCss(
 }
 
 // ======================================================
-// 43. 覆寫路線分析（Override Route Analysis）
+// 43. 路線分析（Route Analysis）
 // ======================================================
 
-analyzeRoute = function (
+function analyzeRoute(
   samples
 ) {
   let surfaceDistanceMeters = 0;
@@ -5893,7 +5432,7 @@ analyzeRoute = function (
         maximumSlopeDegrees
       )
   };
-};
+}
 
 // ======================================================
 // 44. 建立分段彩色路線（Create Slope-Colored Route）
@@ -7668,10 +7207,10 @@ function resetEnhancedRouteProfile() {
 }
 
 // ======================================================
-// 50. 覆寫建立路線功能（Override Route Creation）
+// 50. 建立路線（Route Creation）
 // ======================================================
 
-buildAndAnalyzeRoute = function () {
+function buildAndAnalyzeRoute() {
   if (
     !startPoint ||
     !goalPoint
@@ -7805,13 +7344,13 @@ buildAndAnalyzeRoute = function () {
   showEnhancedProfileSummary(
     enhancedRouteAnalysis
   );
-};
+}
 
 // ======================================================
-// 51. 覆寫路線清除（Override Route Removal）
+// 51. 路線清除（Route Removal）
 // ======================================================
 
-removeRouteLine = function () {
+function removeRouteLine() {
   if (!routeLine) {
     return;
   }
@@ -7842,13 +7381,13 @@ removeRouteLine = function () {
   );
 
   routeLine = null;
-};
+}
 
 // ======================================================
-// 52. 覆寫路線重設（Override Route Reset）
+// 52. 路線重設（Route Reset）
 // ======================================================
 
-resetMissionRoute = function () {
+function resetMissionRoute() {
   startPoint = null;
   goalPoint = null;
 
@@ -7872,13 +7411,13 @@ resetMissionRoute = function () {
   showMissionInstructions();
 
   showCoordinateInformation();
-};
+}
 
 // ======================================================
-// 53. 覆寫地形點擊（Override Terrain Click）
+// 53. 地形點擊（Terrain Click）
 // ======================================================
 
-handleTerrainClick = function (
+function handleTerrainClick(
   event
 ) {
   if (
@@ -7983,7 +7522,7 @@ handleTerrainClick = function (
   showCoordinateInformation();
 
   buildAndAnalyzeRoute();
-};
+}
 
 // 初始顯示空白剖面圖
 resetEnhancedRouteProfile();
