@@ -10,6 +10,9 @@ const VERTICAL_EXAGGERATION = 1;
 const METADATA_URL = "/heightmap_metadata.json";
 const HEIGHTMAP_URL = "/heightmap_float32.bin";
 
+const MOON_OVERVIEW_COLOR_MAP_URL = "/moon/lroc_color_2k.jpg";
+const MOON_OVERVIEW_BUMP_MAP_URL = "/moon/ldem_3_8bit.jpg";
+
 const DEFAULT_MOON_RADIUS_METERS = 1_737_400;
 const CENTRAL_MERIDIAN_DEGREES = 0;
 
@@ -1252,6 +1255,24 @@ layersPanel.innerHTML = wrapBilingualText(`
     地形載入後顯示高程分級
     (Elevation Classes Appear After Loading)
   </div>
+
+  <hr class="panel-divider">
+
+  <div class="layer-header">
+    <strong>
+      月球全貌
+      (Moon Overview)
+    </strong>
+
+    <label class="layer-switch">
+      <input
+        id="moon-overview-toggle"
+        type="checkbox"
+        checked
+      >
+      <span class="layer-slider"></span>
+    </label>
+  </div>
 `);
 
 stopPanelEvents(layersPanel);
@@ -1264,6 +1285,22 @@ const elevationToggle =
 
 const elevationLegend =
   document.querySelector("#elevation-legend");
+
+const moonOverviewToggle =
+  document.querySelector("#moon-overview-toggle");
+
+moonOverviewToggle.addEventListener(
+  "change",
+  () => {
+    moonOverviewEnabled =
+      moonOverviewToggle.checked;
+
+    moonOverviewPanel.style.display =
+      moonOverviewEnabled
+        ? "block"
+        : "none";
+  }
+);
 
 slopeToggle.addEventListener(
   "change",
@@ -1282,6 +1319,284 @@ elevationToggle.addEventListener(
     );
   }
 );
+
+// ======================================================
+// 14A. 月球全貌小視窗（Moon Overview Inset）
+// ======================================================
+
+let moonOverviewEnabled = true;
+
+const moonOverviewScene = new THREE.Scene();
+
+moonOverviewScene.background =
+  new THREE.Color(0x05070c);
+
+const moonOverviewCamera =
+  new THREE.PerspectiveCamera(
+    35,
+    1,
+    0.1,
+    10
+  );
+
+moonOverviewCamera.position.set(
+  0,
+  0,
+  4.2
+);
+
+moonOverviewScene.add(
+  new THREE.AmbientLight(
+    0xffffff,
+    0.4
+  )
+);
+
+const moonOverviewLight =
+  new THREE.DirectionalLight(
+    0xffffff,
+    1.6
+  );
+
+moonOverviewLight.position.set(
+  -3,
+  2,
+  4
+);
+
+moonOverviewScene.add(
+  moonOverviewLight
+);
+
+const moonOverviewTextureLoader =
+  new THREE.TextureLoader();
+
+const moonOverviewMaterial =
+  new THREE.MeshStandardMaterial({
+    map: moonOverviewTextureLoader.load(
+      MOON_OVERVIEW_COLOR_MAP_URL
+    ),
+    bumpMap: moonOverviewTextureLoader.load(
+      MOON_OVERVIEW_BUMP_MAP_URL
+    ),
+    bumpScale: 0.015,
+    roughness: 1,
+    metalness: 0
+  });
+
+const moonOverviewGroup =
+  new THREE.Group();
+
+moonOverviewScene.add(
+  moonOverviewGroup
+);
+
+const moonOverviewMesh =
+  new THREE.Mesh(
+    new THREE.SphereGeometry(
+      1,
+      64,
+      64
+    ),
+    moonOverviewMaterial
+  );
+
+moonOverviewGroup.add(
+  moonOverviewMesh
+);
+
+const moonOverviewAxis =
+  new THREE.Mesh(
+    new THREE.CylinderGeometry(
+      0.01,
+      0.01,
+      2.7,
+      12
+    ),
+    new THREE.MeshBasicMaterial({
+      color: 0xe8ecf2
+    })
+  );
+
+moonOverviewGroup.add(
+  moonOverviewAxis
+);
+
+const moonOverviewPanel = createPanel({
+  top: "270px",
+  right: "14px",
+  width: "200px",
+  height: "220px",
+  zIndex: "25",
+  display: "flex",
+  flexDirection: "column",
+  background: "transparent",
+  backdropFilter: "none",
+  padding: "6px"
+});
+
+makePanelDraggable(
+  moonOverviewPanel,
+  "拖動月球 (Drag Moon)"
+);
+
+makePanelResizable(
+  moonOverviewPanel
+);
+
+stopPanelEvents(
+  moonOverviewPanel
+);
+
+const moonOverviewContent =
+  document.createElement("div");
+
+moonOverviewContent.style.flex = "1 1 auto";
+moonOverviewContent.style.minHeight = "0";
+moonOverviewContent.style.cursor = "grab";
+moonOverviewContent.style.touchAction = "none";
+
+moonOverviewPanel.appendChild(
+  moonOverviewContent
+);
+
+let moonOverviewDragging = false;
+let moonOverviewTiltX = 0;
+let moonOverviewLastPointerX = 0;
+let moonOverviewLastPointerY = 0;
+
+moonOverviewContent.addEventListener(
+  "pointerdown",
+  (event) => {
+    moonOverviewDragging = true;
+
+    moonOverviewLastPointerX = event.clientX;
+    moonOverviewLastPointerY = event.clientY;
+
+    moonOverviewContent.style.cursor = "grabbing";
+
+    moonOverviewContent.setPointerCapture(
+      event.pointerId
+    );
+  }
+);
+
+moonOverviewContent.addEventListener(
+  "pointermove",
+  (event) => {
+    if (!moonOverviewDragging) {
+      return;
+    }
+
+    const deltaX =
+      event.clientX -
+      moonOverviewLastPointerX;
+
+    const deltaY =
+      event.clientY -
+      moonOverviewLastPointerY;
+
+    moonOverviewLastPointerX = event.clientX;
+    moonOverviewLastPointerY = event.clientY;
+
+    moonOverviewGroup.rotation.y +=
+      deltaX * 0.012;
+
+    moonOverviewTiltX =
+      THREE.MathUtils.clamp(
+        moonOverviewTiltX +
+        deltaY * 0.012,
+        -1.3,
+        1.3
+      );
+
+    moonOverviewGroup.rotation.x =
+      moonOverviewTiltX;
+  }
+);
+
+function stopMoonOverviewDrag(event) {
+  if (!moonOverviewDragging) {
+    return;
+  }
+
+  moonOverviewDragging = false;
+
+  moonOverviewContent.style.cursor = "grab";
+
+  if (
+    moonOverviewContent.hasPointerCapture(
+      event.pointerId
+    )
+  ) {
+    moonOverviewContent.releasePointerCapture(
+      event.pointerId
+    );
+  }
+}
+
+moonOverviewContent.addEventListener(
+  "pointerup",
+  stopMoonOverviewDrag
+);
+
+moonOverviewContent.addEventListener(
+  "pointercancel",
+  stopMoonOverviewDrag
+);
+
+function renderMoonOverview() {
+  const rect =
+    moonOverviewContent.getBoundingClientRect();
+
+  if (
+    rect.width < 2 ||
+    rect.height < 2
+  ) {
+    return;
+  }
+
+  const bottomFromGlOrigin =
+    window.innerHeight -
+    rect.top -
+    rect.height;
+
+  moonOverviewCamera.aspect =
+    rect.width /
+    rect.height;
+
+  moonOverviewCamera.updateProjectionMatrix();
+
+  renderer.setScissorTest(true);
+
+  renderer.setViewport(
+    rect.left,
+    bottomFromGlOrigin,
+    rect.width,
+    rect.height
+  );
+
+  renderer.setScissor(
+    rect.left,
+    bottomFromGlOrigin,
+    rect.width,
+    rect.height
+  );
+
+  renderer.render(
+    moonOverviewScene,
+    moonOverviewCamera
+  );
+
+  renderer.setScissorTest(false);
+
+  renderer.setViewport(
+    0,
+    0,
+    window.innerWidth,
+    window.innerHeight
+  );
+}
 
 // ======================================================
 // 15. 經緯度搜尋與起終點面板
@@ -4858,6 +5173,10 @@ function animate() {
     scene,
     camera
   );
+
+  if (moonOverviewEnabled) {
+    renderMoonOverview();
+  }
 }
 
 animate();
