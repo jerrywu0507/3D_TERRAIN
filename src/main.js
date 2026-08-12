@@ -1257,24 +1257,6 @@ layersPanel.innerHTML = wrapBilingualText(`
     地形載入後顯示高程分級
     (Elevation Classes Appear After Loading)
   </div>
-
-  <hr class="panel-divider">
-
-  <div class="layer-header">
-    <strong>
-      月球全貌
-      (Moon Overview)
-    </strong>
-
-    <label class="layer-switch">
-      <input
-        id="moon-overview-toggle"
-        type="checkbox"
-        checked
-      >
-      <span class="layer-slider"></span>
-    </label>
-  </div>
 `);
 
 stopPanelEvents(layersPanel);
@@ -1287,19 +1269,6 @@ const elevationToggle =
 
 const elevationLegend =
   document.querySelector("#elevation-legend");
-
-const moonOverviewToggle =
-  document.querySelector("#moon-overview-toggle");
-
-moonOverviewToggle.addEventListener(
-  "change",
-  () => {
-    moonOverviewEnabled =
-      moonOverviewToggle.checked;
-
-    updateMoonOverviewVisibility();
-  }
-);
 
 slopeToggle.addEventListener(
   "change",
@@ -1322,8 +1291,6 @@ elevationToggle.addEventListener(
 // ======================================================
 // 14A. 月球全貌小視窗（Moon Overview Inset）
 // ======================================================
-
-let moonOverviewEnabled = true;
 
 const moonOverviewScene = new THREE.Scene();
 
@@ -1468,15 +1435,6 @@ makePanelDraggable(
 makePanelResizable(
   moonOverviewPanel
 );
-
-function updateMoonOverviewVisibility() {
-  moonOverviewPanel.classList.toggle(
-    "interface-panel-hidden",
-    !moonOverviewEnabled
-  );
-}
-
-updateMoonOverviewVisibility();
 
 stopPanelEvents(
   moonOverviewPanel
@@ -1858,6 +1816,11 @@ const managedPanels = [
     key: "layers",
     label: "圖層 (Layers)",
     panel: layersPanel
+  },
+  {
+    key: "moon",
+    label: "月球 (Moon)",
+    panel: moonOverviewPanel
   }
 ];
 
@@ -2157,10 +2120,6 @@ function setAllPanelsVisible(visible) {
   }
 
   allPanelsVisible = visible;
-
-  moonOverviewEnabled = visible;
-  moonOverviewToggle.checked = visible;
-  updateMoonOverviewVisibility();
 
   setLocalizedHtml(
     toggleAllPanelsButton,
@@ -5223,7 +5182,11 @@ function animate() {
     camera
   );
 
-  if (moonOverviewEnabled) {
+  if (
+    !moonOverviewPanel.classList.contains(
+      "interface-panel-hidden"
+    )
+  ) {
     renderMoonOverview();
   }
 }
