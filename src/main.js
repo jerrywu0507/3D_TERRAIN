@@ -1492,6 +1492,30 @@ moonOverviewPanel.appendChild(
   moonOverviewContent
 );
 
+const moonOverviewCanvas =
+  document.createElement("canvas");
+
+moonOverviewCanvas.style.display = "block";
+moonOverviewCanvas.style.width = "100%";
+moonOverviewCanvas.style.height = "100%";
+
+moonOverviewContent.appendChild(
+  moonOverviewCanvas
+);
+
+const moonOverviewRenderer =
+  new THREE.WebGLRenderer({
+    canvas: moonOverviewCanvas,
+    antialias: true
+  });
+
+moonOverviewRenderer.setPixelRatio(
+  Math.min(window.devicePixelRatio, 1.5)
+);
+
+let moonOverviewLastWidth = 0;
+let moonOverviewLastHeight = 0;
+
 let moonOverviewDragging = false;
 let moonOverviewTiltX = 0;
 let moonOverviewLastPointerX = 0;
@@ -1578,55 +1602,42 @@ moonOverviewContent.addEventListener(
 );
 
 function renderMoonOverview() {
-  const rect =
-    moonOverviewContent.getBoundingClientRect();
+  const width =
+    moonOverviewContent.clientWidth;
+
+  const height =
+    moonOverviewContent.clientHeight;
 
   if (
-    rect.width < 2 ||
-    rect.height < 2
+    width < 2 ||
+    height < 2
   ) {
     return;
   }
 
-  const bottomFromGlOrigin =
-    window.innerHeight -
-    rect.top -
-    rect.height;
+  if (
+    width !== moonOverviewLastWidth ||
+    height !== moonOverviewLastHeight
+  ) {
+    moonOverviewLastWidth = width;
+    moonOverviewLastHeight = height;
 
-  moonOverviewCamera.aspect =
-    rect.width /
-    rect.height;
+    moonOverviewRenderer.setSize(
+      width,
+      height,
+      false
+    );
 
-  moonOverviewCamera.updateProjectionMatrix();
+    moonOverviewCamera.aspect =
+      width /
+      height;
 
-  renderer.setScissorTest(true);
+    moonOverviewCamera.updateProjectionMatrix();
+  }
 
-  renderer.setViewport(
-    rect.left,
-    bottomFromGlOrigin,
-    rect.width,
-    rect.height
-  );
-
-  renderer.setScissor(
-    rect.left,
-    bottomFromGlOrigin,
-    rect.width,
-    rect.height
-  );
-
-  renderer.render(
+  moonOverviewRenderer.render(
     moonOverviewScene,
     moonOverviewCamera
-  );
-
-  renderer.setScissorTest(false);
-
-  renderer.setViewport(
-    0,
-    0,
-    window.innerWidth,
-    window.innerHeight
   );
 }
 
