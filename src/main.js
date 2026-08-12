@@ -18,9 +18,11 @@ const CENTRAL_MERIDIAN_DEGREES = 0;
 
 const ROUTE_SAMPLE_INTERVAL_METERS = 5;
 const ROUTE_SURFACE_OFFSET_KM = 0.0001;
+const ROUTE_LINE_RADIUS_KM = 0.003;
 
 const MARKER_RADIUS_KM = 0.008;
 const MARKER_SURFACE_GAP_KM = 0.001;
+const FLAG_MARKER_SCALE = 1.6;
 
 const NAMED_POINT_LATITUDE_DEGREES = -84.122515;
 const NAMED_POINT_LONGITUDE_DEGREES = 57.725892;
@@ -2307,10 +2309,10 @@ function createFlagMarker(color) {
   const group = new THREE.Group();
 
   const poleHeightKm =
-    MARKER_RADIUS_KM * 3;
+    MARKER_RADIUS_KM * 3 * FLAG_MARKER_SCALE;
 
   const poleRadiusKm =
-    MARKER_RADIUS_KM * 0.12;
+    MARKER_RADIUS_KM * 0.12 * FLAG_MARKER_SCALE;
 
   const poleGeometry =
     new THREE.CylinderGeometry(
@@ -2341,13 +2343,13 @@ function createFlagMarker(color) {
   group.add(pole);
 
   const bannerWidthKm =
-    MARKER_RADIUS_KM * 1.8;
+    MARKER_RADIUS_KM * 1.8 * FLAG_MARKER_SCALE;
 
   const bannerHeightKm =
-    MARKER_RADIUS_KM * 1.1;
+    MARKER_RADIUS_KM * 1.1 * FLAG_MARKER_SCALE;
 
   const bannerThicknessKm =
-    MARKER_RADIUS_KM * 0.25;
+    MARKER_RADIUS_KM * 0.25 * FLAG_MARKER_SCALE;
 
   const bannerShape =
     new THREE.Shape();
@@ -5836,38 +5838,42 @@ function createEnhancedColoredRoute(
     const current =
       samples[index];
 
-    const points = [
-      new THREE.Vector3(
-        previous.localXKm,
+    const curve =
+      new THREE.LineCurve3(
+        new THREE.Vector3(
+          previous.localXKm,
 
-        previous.elevationMeters /
-          1000 *
-          VERTICAL_EXAGGERATION +
-          ROUTE_SURFACE_OFFSET_KM,
+          previous.elevationMeters /
+            1000 *
+            VERTICAL_EXAGGERATION +
+            ROUTE_SURFACE_OFFSET_KM,
 
-        previous.localZKm
-      ),
+          previous.localZKm
+        ),
 
-      new THREE.Vector3(
-        current.localXKm,
+        new THREE.Vector3(
+          current.localXKm,
 
-        current.elevationMeters /
-          1000 *
-          VERTICAL_EXAGGERATION +
-          ROUTE_SURFACE_OFFSET_KM,
+          current.elevationMeters /
+            1000 *
+            VERTICAL_EXAGGERATION +
+            ROUTE_SURFACE_OFFSET_KM,
 
-        current.localZKm
-      )
-    ];
+          current.localZKm
+        )
+      );
 
     const geometry =
-      new THREE.BufferGeometry()
-        .setFromPoints(
-          points
-        );
+      new THREE.TubeGeometry(
+        curve,
+        1,
+        ROUTE_LINE_RADIUS_KM,
+        8,
+        false
+      );
 
     const material =
-      new THREE.LineBasicMaterial({
+      new THREE.MeshBasicMaterial({
         color:
           getEnhancedRouteSlopeColorHex(
             current.slopeDegrees
@@ -5878,7 +5884,7 @@ function createEnhancedColoredRoute(
       });
 
     const segment =
-      new THREE.Line(
+      new THREE.Mesh(
         geometry,
         material
       );
