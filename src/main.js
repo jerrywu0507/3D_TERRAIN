@@ -1295,10 +1295,7 @@ moonOverviewToggle.addEventListener(
     moonOverviewEnabled =
       moonOverviewToggle.checked;
 
-    moonOverviewPanel.style.display =
-      moonOverviewEnabled
-        ? "block"
-        : "none";
+    updateMoonOverviewVisibility();
   }
 );
 
@@ -1373,16 +1370,42 @@ const moonOverviewTextureLoader =
 
 const moonOverviewMaterial =
   new THREE.MeshStandardMaterial({
-    map: moonOverviewTextureLoader.load(
-      MOON_OVERVIEW_COLOR_MAP_URL
-    ),
-    bumpMap: moonOverviewTextureLoader.load(
-      MOON_OVERVIEW_BUMP_MAP_URL
-    ),
-    bumpScale: 0.015,
+    color: 0xaaaaaa,
     roughness: 1,
     metalness: 0
   });
+
+moonOverviewTextureLoader.load(
+  MOON_OVERVIEW_COLOR_MAP_URL,
+  (texture) => {
+    moonOverviewMaterial.map = texture;
+    moonOverviewMaterial.color.set(0xffffff);
+    moonOverviewMaterial.needsUpdate = true;
+  },
+  undefined,
+  (error) => {
+    console.warn(
+      "月球彩色貼圖載入失敗 (Moon color map failed to load):",
+      error
+    );
+  }
+);
+
+moonOverviewTextureLoader.load(
+  MOON_OVERVIEW_BUMP_MAP_URL,
+  (texture) => {
+    moonOverviewMaterial.bumpMap = texture;
+    moonOverviewMaterial.bumpScale = 0.015;
+    moonOverviewMaterial.needsUpdate = true;
+  },
+  undefined,
+  (error) => {
+    console.warn(
+      "月球高程貼圖載入失敗 (Moon bump map failed to load):",
+      error
+    );
+  }
+);
 
 const moonOverviewGroup =
   new THREE.Group();
@@ -1443,6 +1466,15 @@ makePanelDraggable(
 makePanelResizable(
   moonOverviewPanel
 );
+
+function updateMoonOverviewVisibility() {
+  moonOverviewPanel.classList.toggle(
+    "interface-panel-hidden",
+    !moonOverviewEnabled
+  );
+}
+
+updateMoonOverviewVisibility();
 
 stopPanelEvents(
   moonOverviewPanel
@@ -2112,6 +2144,10 @@ function setAllPanelsVisible(visible) {
   }
 
   allPanelsVisible = visible;
+
+  moonOverviewEnabled = visible;
+  moonOverviewToggle.checked = visible;
+  updateMoonOverviewVisibility();
 
   setLocalizedHtml(
     toggleAllPanelsButton,
