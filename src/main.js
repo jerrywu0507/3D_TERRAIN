@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { ViewHelper } from "three/addons/helpers/ViewHelper.js";
 
 // ======================================================
 // 1. 基本設定（Basic Settings）
@@ -168,6 +169,25 @@ controls.enableZoom = true;
 controls.enablePan = true;
 
 controls.maxPolarAngle = Math.PI * 0.495;
+
+// ======================================================
+// 4A. 方向指標（View Orientation Gizmo）
+// ======================================================
+
+const viewHelper = new ViewHelper(
+  camera,
+  renderer.domElement
+);
+
+viewHelper.setLabels(
+  "X",
+  "Y",
+  "Z"
+);
+
+const viewHelperClock = new THREE.Clock();
+
+renderer.autoClear = false;
 
 // ======================================================
 // 5. 光源（Lights）
@@ -4169,6 +4189,12 @@ renderer.domElement.addEventListener(
 renderer.domElement.addEventListener(
   "pointerup",
   (event) => {
+    if (
+      viewHelper.handleClick(event)
+    ) {
+      return;
+    }
+
     const movement =
       Math.hypot(
         event.clientX -
@@ -5177,6 +5203,8 @@ function animate() {
 
   controls.update();
 
+  renderer.clear();
+
   renderer.render(
     scene,
     camera
@@ -5189,6 +5217,14 @@ function animate() {
   ) {
     renderMoonOverview();
   }
+
+  if (viewHelper.animating) {
+    viewHelper.update(
+      viewHelperClock.getDelta()
+    );
+  }
+
+  viewHelper.render(renderer);
 }
 
 animate();
