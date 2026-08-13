@@ -1638,7 +1638,7 @@ const coordinateSearchPanel = createPanel({
 coordinateSearchPanel.innerHTML = wrapBilingualText(`
   <strong>
     經緯度搜尋與起終點設定
-    (Coordinate Search and Route Point Input)
+    (Coordinate Search and Traverse Point Input)
   </strong>
 
   <div style="
@@ -3798,7 +3798,7 @@ function updateStatusPanel() {
     A：座標軸 (Axes)｜
     S：坡度 (Slope)｜
     E：高程色帶 (Elevation Bands)｜
-    R：清除路線 (Clear Route)｜
+    R：清除路線 (Clear Traverse)｜
     U：顯示／隱藏介面 (Show/Hide Interface)｜
     [ / ]：縮小／放大介面 (Zoom Interface Out/In)｜
     面板上方把手 (Drag Handle)：自由拖動 (Free Drag)
@@ -3922,7 +3922,7 @@ function executeCoordinateAction(action) {
     showCoordinateInformation();
 
     showCoordinateSearchMessage(
-      `已設定終點 (Goal Point Set)：` +
+      `已設定終點 (Destination Point Set)：` +
       `${point.latitudeDegrees.toFixed(6)}°, ` +
       `${point.longitudeDegrees.toFixed(6)}°`,
       "#ff7777"
@@ -4424,7 +4424,7 @@ function showCoordinateInformation() {
     <hr class="panel-divider">
 
     ${formatCoordinatePanelPoint(
-      "終點 (Goal Point)",
+      "終點 (Destination Point)",
       goalPoint
     )}
 
@@ -4441,7 +4441,12 @@ function showCoordinateInformation() {
       ${CENTRAL_MERIDIAN_DEGREES}°<br>
 
       Elevation Datum：
-      Lunar Datum 0 km
+      Referenced to ${(
+        (
+          terrainMetadata?.moonRadiusMeters ??
+          DEFAULT_MOON_RADIUS_METERS
+        ) / 1000
+      ).toFixed(1)} km Sphere
     </span>
   `);
 }
@@ -4457,7 +4462,7 @@ function updateMissionPanel(
   missionPanel.innerHTML = wrapBilingualText(`
     <strong>
       月球車任務路線
-      (Rover Mission Route)
+      (Rover Mission Traverse)
     </strong><br>
 
     水平距離
@@ -4513,7 +4518,7 @@ function updateMissionPanel(
     <br>
 
     路線安全狀態
-    (Route Safety Status)：
+    (Traverse Safety Status)：
 
     <strong style="
       color:${status.color};
@@ -4535,7 +4540,7 @@ function updateMissionWaitingPanel(
   missionPanel.innerHTML = wrapBilingualText(`
     <strong>
       月球車任務路線
-      (Rover Mission Route)
+      (Rover Mission Traverse)
     </strong><br>
 
     <span style="
@@ -4548,7 +4553,7 @@ function updateMissionWaitingPanel(
       ${
         isStart
           ? "起點已設定 (Start Point Set)"
-          : "終點已設定 (Goal Point Set)"
+          : "終點已設定 (Destination Point Set)"
       }
     </span>
 
@@ -4556,7 +4561,7 @@ function updateMissionWaitingPanel(
 
     ${
       isStart
-        ? "請設定終點。(Please Set the Goal Point.)"
+        ? "請設定終點。(Please Set the Destination Point.)"
         : "請設定起點。(Please Set the Start Point.)"
     }
   `);
@@ -4935,17 +4940,17 @@ function showMissionInstructions() {
   missionPanel.innerHTML = wrapBilingualText(`
     <strong>
       月球車任務路線
-      (Rover Mission Route)
+      (Rover Mission Traverse)
     </strong><br>
 
     第一次點擊 (First Click)：
     設定起點 (Set Start Point)<br>
 
     第二次點擊 (Second Click)：
-    設定終點 (Set Goal Point)<br>
+    設定終點 (Set Destination Point)<br>
 
     第三次點擊 (Third Click)：
-    建立新路線 (Create New Route)<br>
+    建立新路線 (Create New Traverse)<br>
 
     <br>
 
@@ -4961,9 +4966,9 @@ function showMissionInstructions() {
 
     <span style="color:#aaaaaa">
       綠色標記 (Green Marker)：起點 (Start)<br>
-      紅色標記 (Red Marker)：終點 (Goal)<br>
+      紅色標記 (Red Marker)：終點 (Destination)<br>
       橘色標記 (Orange Marker)：搜尋位置 (Search Location)<br>
-      白色線 (White Line)：貼地路線 (Ground-Hugging Route)
+      白色線 (White Line)：貼地路線 (Ground-Hugging Traverse)
     </span>
   `);
 }
@@ -5359,13 +5364,13 @@ const enhancedRouteProfilePanel =
 enhancedRouteProfilePanel.innerHTML = wrapBilingualText(`
   <strong>
     路線高程剖面圖
-    (Route Elevation Cross Section)
+    (Traverse Elevation Cross Section)
   </strong><br>
 
   <span style="color:#aaaaaa">
     設定起點與終點後，顯示累積距離、絕對高程、
     分段坡度、最大坡度位置與危險路段。
-    (Set the Start and Goal Points to Display Distance,
+    (Set the Start and Destination Points to Display Distance,
     Elevation, Segment Slope, Maximum Slope Position
     and Hazardous Sections.)
   </span>
@@ -5382,7 +5387,7 @@ enhancedRouteProfilePanel.innerHTML = wrapBilingualText(`
     class="enhanced-profile-information"
   >
     尚未建立路線
-    (No Route Created)
+    (No Traverse Created)
   </div>
 
   <div class="enhanced-route-legend">
@@ -6602,7 +6607,7 @@ function drawEnhancedRouteProfile(
     context.fillText(
       pickLangText(
         "尚未建立路線",
-        "No Route Created"
+        "No Traverse Created"
       ),
       width / 2,
       height / 2
@@ -7302,7 +7307,7 @@ function showEnhancedProfileSummary(
   ) {
     enhancedProfileInformation.innerHTML = wrapBilingualText(`
       尚未建立路線
-      (No Route Created)
+      (No Traverse Created)
     `);
 
     return;
@@ -7576,7 +7581,7 @@ function resetEnhancedRouteProfile() {
 
   enhancedProfileInformation.innerHTML = wrapBilingualText(`
     尚未建立路線
-    (No Route Created)
+    (No Traverse Created)
   `);
 
   drawEnhancedRouteProfile(
@@ -7685,11 +7690,11 @@ function buildAndAnalyzeRoute() {
     missionPanel.innerHTML = wrapBilingualText(`
       <strong>
         路線建立失敗
-        (Route Creation Failed)
+        (Traverse Creation Failed)
       </strong><br>
 
       沿線沒有足夠的有效高程資料。
-      (Insufficient Valid Elevation Data Along the Route.)
+      (Insufficient Valid Elevation Data Along the Traverse.)
     `);
 
     resetEnhancedRouteProfile();
