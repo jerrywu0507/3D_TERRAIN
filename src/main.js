@@ -90,8 +90,8 @@ let elevationTerrainColors = null;
 let slopeLayerEnabled = false;
 let elevationLayerEnabled = false;
 
-let startPoint = null;
-let goalPoint = null;
+let waypoints = [];
+let waypointMarkers = [];
 
 let routeLine = null;
 let routeSamples = [];
@@ -1860,10 +1860,10 @@ coordinateSearchPanel.innerHTML = wrapBilingualText(`
     </button>
 
     <button
-      id="set-goal-coordinate-button"
+      id="add-waypoint-coordinate-button"
       class="interface-button"
     >
-      設為終點 (Set Destination)
+      新增路徑點 (Add Waypoint)
     </button>
 
     <button
@@ -1907,9 +1907,9 @@ const setStartCoordinateButton =
     "#set-start-coordinate-button"
   );
 
-const setGoalCoordinateButton =
+const addWaypointCoordinateButton =
   document.querySelector(
-    "#set-goal-coordinate-button"
+    "#add-waypoint-coordinate-button"
   );
 
 const clearCoordinateInputButton =
@@ -1936,10 +1936,10 @@ setStartCoordinateButton.addEventListener(
   }
 );
 
-setGoalCoordinateButton.addEventListener(
+addWaypointCoordinateButton.addEventListener(
   "click",
   () => {
-    executeCoordinateAction("goal");
+    executeCoordinateAction("waypoint");
   }
 );
 
@@ -2409,19 +2409,57 @@ clickMarker.visible = false;
 
 scene.add(clickMarker);
 
-const startMarker =
-  createFlagMarker(0x00ff66);
+const WAYPOINT_START_COLOR = 0x00ff66;
+const WAYPOINT_DESTINATION_COLOR = 0xff3333;
+const WAYPOINT_INTERMEDIATE_COLOR = 0xffcc33;
 
-startMarker.visible = false;
+function getWaypointMarkerColor(index, total) {
+  if (index === 0) {
+    return WAYPOINT_START_COLOR;
+  }
 
-scene.add(startMarker);
+  if (index === total - 1) {
+    return WAYPOINT_DESTINATION_COLOR;
+  }
 
-const goalMarker =
-  createFlagMarker(0xff3333);
+  return WAYPOINT_INTERMEDIATE_COLOR;
+}
 
-goalMarker.visible = false;
+function disposeMarkerObject(marker) {
+  scene.remove(marker);
 
-scene.add(goalMarker);
+  marker.traverse((child) => {
+    child.geometry?.dispose();
+
+    if (Array.isArray(child.material)) {
+      for (const material of child.material) {
+        material.dispose();
+      }
+    } else {
+      child.material?.dispose();
+    }
+  });
+}
+
+function rebuildWaypointMarkers() {
+  for (const marker of waypointMarkers) {
+    disposeMarkerObject(marker);
+  }
+
+  waypointMarkers = waypoints.map((point, index) => {
+    const marker = createFlagMarker(
+      getWaypointMarkerColor(index, waypoints.length)
+    );
+
+    scene.add(marker);
+
+    placeMarkerOnSurface(marker, point);
+
+    marker.visible = true;
+
+    return marker;
+  });
+}
 
 function createSphereMarker(color) {
   const geometry =
@@ -4089,18 +4127,28 @@ function executeCoordinateAction(action) {
     return;
   }
 
-  if (action === "goal") {
-    setGoalPointFromCoordinate(
+  if (action === "waypoint") {
+    const isFirstPoint =
+      waypoints.length === 0;
+
+    addWaypointFromCoordinate(
       point
     );
 
     showCoordinateInformation();
 
     showCoordinateSearchMessage(
-      `已設定終點 (Destination Point Set)：` +
-      `${point.latitudeDegrees.toFixed(6)}°, ` +
-      `${point.longitudeDegrees.toFixed(6)}°`,
-      "#ff7777"
+      isFirstPoint
+        ? `已設定起點 (Start Point Set)：` +
+          `${point.latitudeDegrees.toFixed(6)}°, ` +
+          `${point.longitudeDegrees.toFixed(6)}°`
+        : `路徑點 (Waypoint) ${waypoints.length - 1} ` +
+          `已新增 (Added)：` +
+          `${point.latitudeDegrees.toFixed(6)}°, ` +
+          `${point.longitudeDegrees.toFixed(6)}°`,
+      isFirstPoint
+        ? "#42ff78"
+        : "#ffcc55"
     );
 
     return;
@@ -4216,49 +4264,33 @@ function createPointDataFromGeographicCoordinates(
 function setStartPointFromCoordinate(
   point
 ) {
-  startPoint = point;
+  waypoints = [point];
 
-  placeMarkerOnSurface(
-    startMarker,
-    startPoint
-  );
-
-  startMarker.visible = true;
+  rebuildWaypointMarkers();
 
   removeRouteLine();
   routeSamples = [];
 
-  if (goalPoint) {
-    buildAndAnalyzeRoute();
-  } else {
-    updateMissionWaitingPanel(
-      "start"
-    );
-  }
+  clearEnhancedHazardMarkers();
+  resetEnhancedRouteProfile();
+
+  updateMissionWaitingPanel();
 }
 
-function setGoalPointFromCoordinate(
+function addWaypointFromCoordinate(
   point
 ) {
-  goalPoint = point;
+  if (waypoints.length === 0) {
+    setStartPointFromCoordinate(point);
 
-  placeMarkerOnSurface(
-    goalMarker,
-    goalPoint
-  );
-
-  goalMarker.visible = true;
-
-  removeRouteLine();
-  routeSamples = [];
-
-  if (startPoint) {
-    buildAndAnalyzeRoute();
-  } else {
-    updateMissionWaitingPanel(
-      "goal"
-    );
+    return;
   }
+
+  waypoints.push(point);
+
+  rebuildWaypointMarkers();
+
+  buildAndAnalyzeRoute();
 }
 
 function focusCameraOnPoint(point) {
@@ -4584,6 +4616,65 @@ function formatCoordinatePanelPoint(
   `;
 }
 
+function buildWaypointPanelSections() {
+  if (waypoints.length === 0) {
+    return (
+      formatCoordinatePanelPoint(
+        "起點 (Start Point)",
+        null
+      ) +
+      formatCoordinatePanelPoint(
+        "終點 (Destination Point)",
+        null
+      )
+    );
+  }
+
+  if (waypoints.length === 1) {
+    return (
+      formatCoordinatePanelPoint(
+        "起點 (Start Point)",
+        waypoints[0]
+      ) +
+      formatCoordinatePanelPoint(
+        "終點 (Destination Point)",
+        null
+      )
+    );
+  }
+
+  const sections = [
+    formatCoordinatePanelPoint(
+      "起點 (Start Point)",
+      waypoints[0]
+    )
+  ];
+
+  for (
+    let index = 1;
+    index < waypoints.length - 1;
+    index += 1
+  ) {
+    sections.push(
+      formatCoordinatePanelPoint(
+        `路徑點 (Waypoint) ${index}`,
+        waypoints[index]
+      )
+    );
+  }
+
+  sections.push(
+    formatCoordinatePanelPoint(
+      "終點 (Destination Point)",
+      waypoints[waypoints.length - 1]
+    )
+  );
+
+  return sections.join(
+    '<hr class="panel-divider">'
+  );
+}
+
 function showCoordinateInformation() {
   coordinatePanel.innerHTML = wrapBilingualText(`
     <strong>
@@ -4591,17 +4682,7 @@ function showCoordinateInformation() {
       (Lunar Surface Coordinates)
     </strong><br>
 
-    ${formatCoordinatePanelPoint(
-      "起點 (Start Point)",
-      startPoint
-    )}
-
-    <hr class="panel-divider">
-
-    ${formatCoordinatePanelPoint(
-      "終點 (Destination Point)",
-      goalPoint
-    )}
+    ${buildWaypointPanelSections()}
 
     <hr class="panel-divider">
 
@@ -4638,6 +4719,12 @@ function updateMissionPanel(
     <strong>
       月球車任務路線
       (Rover Mission Traverse)
+    </strong><br>
+
+    路徑點數量
+    (Waypoint Count)：
+    <strong>
+      ${waypoints.length}
     </strong><br>
 
     水平距離
@@ -4706,39 +4793,21 @@ function updateMissionPanel(
   `);
 }
 
-function updateMissionWaitingPanel(
-  selectedType
-) {
-  const isStart =
-    selectedType === "start";
-
+function updateMissionWaitingPanel() {
   missionPanel.innerHTML = wrapBilingualText(`
     <strong>
       月球車任務路線
       (Rover Mission Traverse)
     </strong><br>
 
-    <span style="
-      color:${
-        isStart
-          ? "#00ff66"
-          : "#ff6666"
-      };
-    ">
-      ${
-        isStart
-          ? "起點已設定 (Start Point Set)"
-          : "終點已設定 (Destination Point Set)"
-      }
+    <span style="color:#00ff66">
+      起點已設定 (Start Point Set)
     </span>
 
     <br><br>
 
-    ${
-      isStart
-        ? "請設定終點。(Please Set the Destination Point.)"
-        : "請設定起點。(Please Set the Start Point.)"
-    }
+    請繼續點擊地形以新增路徑點，或設定終點。
+    (Continue Clicking the Terrain to Add Waypoints, or Set the Destination Point.)
   `);
 }
 
@@ -5121,11 +5190,11 @@ function showMissionInstructions() {
     第一次點擊 (First Click)：
     設定起點 (Set Start Point)<br>
 
-    第二次點擊 (Second Click)：
-    設定終點 (Set Destination Point)<br>
+    後續每次點擊 (Every Click After)：
+    新增路徑點 (Add a Waypoint)<br>
 
-    第三次點擊 (Third Click)：
-    建立新路線 (Create New Traverse)<br>
+    按 R 鍵 (Press R)：
+    清除路線重新開始 (Clear Traverse and Start Over)<br>
 
     <br>
 
@@ -5135,12 +5204,13 @@ function showMissionInstructions() {
 
     設定點 (Set a Point)<br>
     設為起點 (Set as Start)<br>
-    設為終點 (Set as Destination)<br>
+    新增路徑點 (Add Waypoint)<br>
 
     <br>
 
     <span style="color:#aaaaaa">
       綠色標記 (Green Marker)：起點 (Start)<br>
+      琥珀色標記 (Amber Marker)：路徑點 (Waypoint)<br>
       紅色標記 (Red Marker)：終點 (Destination)<br>
       橘色標記 (Orange Marker)：搜尋位置 (Search Location)<br>
       白色線 (White Line)：貼地路線 (Ground-Hugging Traverse)
@@ -5755,6 +5825,7 @@ function getSlopeStatusLabel(
 function analyzeRoute(
   samples
 ) {
+  let horizontalDistanceMeters = 0;
   let surfaceDistanceMeters = 0;
   let cumulativeAscentMeters = 0;
   let cumulativeDescentMeters = 0;
@@ -5792,7 +5863,7 @@ function analyzeRoute(
     const current =
       samples[index];
 
-    const horizontalDistanceMeters =
+    const segmentHorizontalDistanceMeters =
       Math.hypot(
         (
           current.localXKm -
@@ -5807,13 +5878,16 @@ function analyzeRoute(
         1000
       );
 
+    horizontalDistanceMeters +=
+      segmentHorizontalDistanceMeters;
+
     const elevationDifferenceMeters =
       current.elevationMeters -
       previous.elevationMeters;
 
     const surfaceSegmentDistanceMeters =
       Math.hypot(
-        horizontalDistanceMeters,
+        segmentHorizontalDistanceMeters,
         elevationDifferenceMeters
       );
 
@@ -5824,7 +5898,7 @@ function analyzeRoute(
       surfaceDistanceMeters;
 
     current.horizontalDistanceMeters =
-      horizontalDistanceMeters;
+      segmentHorizontalDistanceMeters;
 
     current.surfaceSegmentDistanceMeters =
       surfaceSegmentDistanceMeters;
@@ -5938,20 +6012,7 @@ function analyzeRoute(
     ];
 
   return {
-    horizontalDistanceMeters:
-      Math.hypot(
-        (
-          last.localXKm -
-          first.localXKm
-        ) *
-        1000,
-
-        (
-          last.localZKm -
-          first.localZKm
-        ) *
-        1000
-      ),
+    horizontalDistanceMeters,
 
     surfaceDistanceMeters,
 
@@ -7772,10 +7833,7 @@ function resetEnhancedRouteProfile() {
 // ======================================================
 
 function buildAndAnalyzeRoute() {
-  if (
-    !startPoint ||
-    !goalPoint
-  ) {
+  if (waypoints.length < 2) {
     return;
   }
 
@@ -7783,82 +7841,99 @@ function buildAndAnalyzeRoute() {
 
   clearEnhancedHazardMarkers();
 
-  const horizontalDistanceMeters =
-    Math.hypot(
-      (
-        goalPoint.localXKm -
-        startPoint.localXKm
-      ) *
-      1000,
-
-      (
-        goalPoint.localZKm -
-        startPoint.localZKm
-      ) *
-      1000
-    );
-
-  const segmentCount =
-    Math.max(
-      2,
-      Math.ceil(
-        horizontalDistanceMeters /
-        ROUTE_SAMPLE_INTERVAL_METERS
-      )
-    );
-
   routeSamples = [];
 
   for (
-    let index = 0;
-    index <= segmentCount;
-    index += 1
+    let segment = 0;
+    segment < waypoints.length - 1;
+    segment += 1
   ) {
-    const t =
-      index /
-      segmentCount;
+    const segmentStart =
+      waypoints[segment];
 
-    const localXKm =
-      THREE.MathUtils.lerp(
-        startPoint.localXKm,
-        goalPoint.localXKm,
-        t
+    const segmentEnd =
+      waypoints[segment + 1];
+
+    const segmentHorizontalDistanceMeters =
+      Math.hypot(
+        (
+          segmentEnd.localXKm -
+          segmentStart.localXKm
+        ) *
+        1000,
+
+        (
+          segmentEnd.localZKm -
+          segmentStart.localZKm
+        ) *
+        1000
       );
 
-    const localZKm =
-      THREE.MathUtils.lerp(
-        startPoint.localZKm,
-        goalPoint.localZKm,
-        t
-      );
-
-    const elevationMeters =
-      sampleElevationBilinear(
-        localXKm,
-        localZKm
-      );
-
-    if (
-      !Number.isFinite(
-        elevationMeters
-      )
-    ) {
-      continue;
-    }
-
-    routeSamples.push(
-      createPointDataFromWorldPoint(
-        new THREE.Vector3(
-          localXKm,
-
-          elevationMeters /
-            1000 *
-            VERTICAL_EXAGGERATION,
-
-          localZKm
+    const segmentCount =
+      Math.max(
+        2,
+        Math.ceil(
+          segmentHorizontalDistanceMeters /
+          ROUTE_SAMPLE_INTERVAL_METERS
         )
-      )
-    );
+      );
+
+    const startIndex =
+      segment === 0
+        ? 0
+        : 1;
+
+    for (
+      let index = startIndex;
+      index <= segmentCount;
+      index += 1
+    ) {
+      const t =
+        index /
+        segmentCount;
+
+      const localXKm =
+        THREE.MathUtils.lerp(
+          segmentStart.localXKm,
+          segmentEnd.localXKm,
+          t
+        );
+
+      const localZKm =
+        THREE.MathUtils.lerp(
+          segmentStart.localZKm,
+          segmentEnd.localZKm,
+          t
+        );
+
+      const elevationMeters =
+        sampleElevationBilinear(
+          localXKm,
+          localZKm
+        );
+
+      if (
+        !Number.isFinite(
+          elevationMeters
+        )
+      ) {
+        continue;
+      }
+
+      routeSamples.push(
+        createPointDataFromWorldPoint(
+          new THREE.Vector3(
+            localXKm,
+
+            elevationMeters /
+              1000 *
+              VERTICAL_EXAGGERATION,
+
+            localZKm
+          )
+        )
+      );
+    }
   }
 
   if (
@@ -7949,19 +8024,14 @@ function removeRouteLine() {
 // ======================================================
 
 function resetMissionRoute() {
-  startPoint = null;
-  goalPoint = null;
+  waypoints = [];
+
+  rebuildWaypointMarkers();
 
   routeSamples = [];
 
   enhancedRouteAnalysis =
     null;
-
-  startMarker.visible =
-    false;
-
-  goalMarker.visible =
-    false;
 
   removeRouteLine();
 
@@ -8040,49 +8110,19 @@ function handleTerrainClick(
   clickMarker.visible =
     true;
 
-  if (
-    !startPoint ||
-    (
-      startPoint &&
-      goalPoint
-    )
-  ) {
-    resetMissionRoute();
-
-    startPoint =
-      correctedPoint;
-
-    placeMarkerOnSurface(
-      startMarker,
-      startPoint
-    );
-
-    startMarker.visible =
-      true;
-
-    showCoordinateInformation();
-
-    updateMissionWaitingPanel(
-      "start"
-    );
-
-    return;
-  }
-
-  goalPoint =
-    correctedPoint;
-
-  placeMarkerOnSurface(
-    goalMarker,
-    goalPoint
+  waypoints.push(
+    correctedPoint
   );
 
-  goalMarker.visible =
-    true;
+  rebuildWaypointMarkers();
 
   showCoordinateInformation();
 
-  buildAndAnalyzeRoute();
+  if (waypoints.length >= 2) {
+    buildAndAnalyzeRoute();
+  } else {
+    updateMissionWaitingPanel();
+  }
 }
 
 // 初始顯示空白剖面圖
