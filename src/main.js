@@ -92,6 +92,11 @@ let elevationLayerEnabled = false;
 
 let waypoints = [];
 let waypointMarkers = [];
+let selectedWaypointIndex = null;
+
+let activeWaypointPointerId = null;
+let activeWaypointIndex = null;
+let waypointDragMoved = false;
 
 let routeLine = null;
 let routeSamples = [];
@@ -1874,6 +1879,41 @@ coordinateSearchPanel.innerHTML = wrapBilingualText(`
     </button>
   </div>
 
+  <div style="
+    margin-top:7px;
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:7px;
+  ">
+    <button
+      id="save-route-button"
+      class="interface-button"
+    >
+      儲存路線 (Save Route)
+    </button>
+
+    <button
+      id="load-route-button"
+      class="interface-button"
+    >
+      載入路線 (Load Route)
+    </button>
+
+    <button
+      id="export-route-csv-button"
+      class="interface-button"
+    >
+      匯出 (Export) CSV
+    </button>
+
+    <button
+      id="export-route-geojson-button"
+      class="interface-button"
+    >
+      匯出 (Export) GeoJSON
+    </button>
+  </div>
+
   <div
     id="coordinate-search-message"
     style="
@@ -1953,6 +1993,54 @@ clearCoordinateInputButton.addEventListener(
       "輸入已清除 (Coordinate Input Cleared)",
       "#aaaaaa"
     );
+  }
+);
+
+const saveRouteButton =
+  document.querySelector(
+    "#save-route-button"
+  );
+
+const loadRouteButton =
+  document.querySelector(
+    "#load-route-button"
+  );
+
+const exportRouteCsvButton =
+  document.querySelector(
+    "#export-route-csv-button"
+  );
+
+const exportRouteGeoJsonButton =
+  document.querySelector(
+    "#export-route-geojson-button"
+  );
+
+saveRouteButton.addEventListener(
+  "click",
+  () => {
+    saveRouteToLocalStorage();
+  }
+);
+
+loadRouteButton.addEventListener(
+  "click",
+  () => {
+    loadRouteFromLocalStorage();
+  }
+);
+
+exportRouteCsvButton.addEventListener(
+  "click",
+  () => {
+    exportRouteAsCsv();
+  }
+);
+
+exportRouteGeoJsonButton.addEventListener(
+  "click",
+  () => {
+    exportRouteAsGeoJson();
   }
 );
 
@@ -2457,8 +2545,35 @@ function rebuildWaypointMarkers() {
 
     marker.visible = true;
 
+    marker.scale.setScalar(
+      index === selectedWaypointIndex
+        ? 1.4
+        : 1
+    );
+
     return marker;
   });
+}
+
+function getWaypointDisplayLabelParts(index) {
+  if (index === 0) {
+    return {
+      zh: "起點",
+      en: "Start Point"
+    };
+  }
+
+  if (index === waypoints.length - 1) {
+    return {
+      zh: "終點",
+      en: "Destination Point"
+    };
+  }
+
+  return {
+    zh: `路徑點 ${index}`,
+    en: `Waypoint ${index}`
+  };
 }
 
 function createSphereMarker(color) {
@@ -4265,6 +4380,7 @@ function setStartPointFromCoordinate(
   point
 ) {
   waypoints = [point];
+  selectedWaypointIndex = null;
 
   rebuildWaypointMarkers();
 
@@ -4286,7 +4402,17 @@ function addWaypointFromCoordinate(
     return;
   }
 
-  waypoints.push(point);
+  if (selectedWaypointIndex !== null) {
+    waypoints.splice(
+      selectedWaypointIndex + 1,
+      0,
+      point
+    );
+
+    selectedWaypointIndex = null;
+  } else {
+    waypoints.push(point);
+  }
 
   rebuildWaypointMarkers();
 
@@ -4390,12 +4516,142 @@ renderer.domElement.addEventListener(
 
     pointerDownY =
       event.clientY;
+
+    const hitIndex =
+      pickWaypointMarkerIndex(
+        event
+      );
+
+    if (hitIndex === null) {
+      return;
+    }
+
+    activeWaypointPointerId =
+      event.pointerId;
+
+    activeWaypointIndex =
+      hitIndex;
+
+    waypointDragMoved = false;
+
+    controls.enabled = false;
+
+    renderer.domElement.setPointerCapture(
+      event.pointerId
+    );
   }
 );
 
 renderer.domElement.addEventListener(
+  "pointermove",
+  (event) => {
+    if (
+      activeWaypointIndex === null ||
+      event.pointerId !==
+        activeWaypointPointerId
+    ) {
+      return;
+    }
+
+    const movement =
+      Math.hypot(
+        event.clientX -
+        pointerDownX,
+
+        event.clientY -
+        pointerDownY
+      );
+
+    if (movement <= 5) {
+      return;
+    }
+
+    waypointDragMoved = true;
+
+    const point =
+      pickTerrainPoint(event);
+
+    if (!point) {
+      return;
+    }
+
+    placeMarkerOnSurface(
+      waypointMarkers[
+        activeWaypointIndex
+      ],
+      rebuildPointUsingDemHeight(
+        point
+      )
+    );
+  }
+);
+
+function finishWaypointPointerInteraction(
+  event
+) {
+  const index =
+    activeWaypointIndex;
+
+  const moved =
+    waypointDragMoved;
+
+  controls.enabled = true;
+
+  if (
+    renderer.domElement.hasPointerCapture(
+      event.pointerId
+    )
+  ) {
+    renderer.domElement.releasePointerCapture(
+      event.pointerId
+    );
+  }
+
+  activeWaypointPointerId = null;
+  activeWaypointIndex = null;
+  waypointDragMoved = false;
+
+  if (!moved) {
+    toggleWaypointSelection(index);
+
+    return;
+  }
+
+  const point =
+    pickTerrainPoint(event);
+
+  if (point) {
+    waypoints[index] =
+      rebuildPointUsingDemHeight(
+        point
+      );
+  }
+
+  rebuildWaypointMarkers();
+  showCoordinateInformation();
+
+  if (waypoints.length >= 2) {
+    buildAndAnalyzeRoute();
+  } else {
+    updateMissionWaitingPanel();
+  }
+}
+
+renderer.domElement.addEventListener(
   "pointerup",
   (event) => {
+    if (
+      activeWaypointIndex !== null &&
+      event.pointerId ===
+        activeWaypointPointerId
+    ) {
+      finishWaypointPointerInteraction(
+        event
+      );
+
+      return;
+    }
+
     if (
       viewHelper.handleClick(event)
     ) {
@@ -4418,6 +4674,171 @@ renderer.domElement.addEventListener(
     handleTerrainClick(event);
   }
 );
+
+renderer.domElement.addEventListener(
+  "pointercancel",
+  (event) => {
+    if (
+      activeWaypointIndex === null ||
+      event.pointerId !==
+        activeWaypointPointerId
+    ) {
+      return;
+    }
+
+    controls.enabled = true;
+
+    if (
+      renderer.domElement.hasPointerCapture(
+        event.pointerId
+      )
+    ) {
+      renderer.domElement.releasePointerCapture(
+        event.pointerId
+      );
+    }
+
+    activeWaypointPointerId = null;
+    activeWaypointIndex = null;
+    waypointDragMoved = false;
+
+    rebuildWaypointMarkers();
+  }
+);
+
+function pickWaypointMarkerIndex(
+  event
+) {
+  if (waypointMarkers.length === 0) {
+    return null;
+  }
+
+  const rect =
+    renderer.domElement
+      .getBoundingClientRect();
+
+  pointer.x =
+    (
+      (
+        event.clientX -
+        rect.left
+      ) /
+      rect.width
+    ) *
+    2 -
+    1;
+
+  pointer.y =
+    -(
+      (
+        event.clientY -
+        rect.top
+      ) /
+      rect.height
+    ) *
+    2 +
+    1;
+
+  raycaster.setFromCamera(
+    pointer,
+    camera
+  );
+
+  const intersections =
+    raycaster.intersectObjects(
+      waypointMarkers,
+      true
+    );
+
+  if (
+    intersections.length === 0
+  ) {
+    return null;
+  }
+
+  let hitObject =
+    intersections[0].object;
+
+  while (
+    hitObject &&
+    !waypointMarkers.includes(
+      hitObject
+    )
+  ) {
+    hitObject =
+      hitObject.parent;
+  }
+
+  if (!hitObject) {
+    return null;
+  }
+
+  return waypointMarkers.indexOf(
+    hitObject
+  );
+}
+
+function toggleWaypointSelection(
+  index
+) {
+  selectedWaypointIndex =
+    selectedWaypointIndex === index
+      ? null
+      : index;
+
+  rebuildWaypointMarkers();
+
+  if (selectedWaypointIndex === null) {
+    showCoordinateInformation();
+
+    return;
+  }
+
+  const label =
+    getWaypointDisplayLabelParts(
+      selectedWaypointIndex
+    );
+
+  showCoordinateSearchMessage(
+    `<span class="lang-zh">${label.zh} 已選取，拖曳可移動、點擊地形可在其後插入新點、按刪除鍵移除</span>` +
+    `<span class="lang-en">${label.en} Selected — Drag to Move, Click Terrain to Insert After, Press Delete to Remove</span>`,
+    "#ffcc55"
+  );
+}
+
+function deleteSelectedWaypoint() {
+  if (selectedWaypointIndex === null) {
+    return;
+  }
+
+  waypoints.splice(
+    selectedWaypointIndex,
+    1
+  );
+
+  selectedWaypointIndex = null;
+
+  rebuildWaypointMarkers();
+  showCoordinateInformation();
+
+  if (waypoints.length >= 2) {
+    buildAndAnalyzeRoute();
+
+    return;
+  }
+
+  removeRouteLine();
+  routeSamples = [];
+
+  clearEnhancedHazardMarkers();
+  resetEnhancedRouteProfile();
+
+  if (waypoints.length === 1) {
+    updateMissionWaitingPanel();
+  } else {
+    showMissionInstructions();
+  }
+}
 
 function pickTerrainPoint(event) {
   const rect =
@@ -5193,8 +5614,22 @@ function showMissionInstructions() {
     後續每次點擊 (Every Click After)：
     新增路徑點 (Add a Waypoint)<br>
 
-    按 R 鍵 (Press R)：
+    R：
     清除路線重新開始 (Clear Traverse and Start Over)<br>
+
+    <br>
+
+    點擊路徑點旗子 (Click a Waypoint Flag)：
+    選取該點 (Select It)<br>
+
+    拖曳路徑點旗子 (Drag a Waypoint Flag)：
+    移動位置 (Move Its Position)<br>
+
+    選取後點擊地形 (Click Terrain After Selecting)：
+    在其後插入新點 (Insert a New Point After It)<br>
+
+    選取後按刪除鍵 (Press Delete After Selecting)：
+    移除該點 (Remove It)<br>
 
     <br>
 
@@ -5205,6 +5640,9 @@ function showMissionInstructions() {
     設定點 (Set a Point)<br>
     設為起點 (Set as Start)<br>
     新增路徑點 (Add Waypoint)<br>
+    儲存路線 (Save Route)<br>
+    載入路線 (Load Route)<br>
+    匯出 (Export) CSV / GeoJSON<br>
 
     <br>
 
@@ -5402,6 +5840,26 @@ window.addEventListener(
       setElevationLayerEnabled(
         elevationToggle.checked
       );
+    }
+
+    if (
+      (
+        key === "delete" ||
+        key === "backspace"
+      ) &&
+      selectedWaypointIndex !== null
+    ) {
+      deleteSelectedWaypoint();
+    }
+
+    if (
+      key === "escape" &&
+      selectedWaypointIndex !== null
+    ) {
+      selectedWaypointIndex = null;
+
+      rebuildWaypointMarkers();
+      showCoordinateInformation();
     }
   }
 );
@@ -8025,6 +8483,7 @@ function removeRouteLine() {
 
 function resetMissionRoute() {
   waypoints = [];
+  selectedWaypointIndex = null;
 
   rebuildWaypointMarkers();
 
@@ -8042,6 +8501,321 @@ function resetMissionRoute() {
   showMissionInstructions();
 
   showCoordinateInformation();
+}
+
+// ======================================================
+// 52A. 路線匯出（Route Export）
+// ======================================================
+
+function downloadTextFile(
+  filename,
+  mimeType,
+  content
+) {
+  const blob =
+    new Blob(
+      [content],
+      { type: mimeType }
+    );
+
+  const url =
+    URL.createObjectURL(blob);
+
+  const link =
+    document.createElement("a");
+
+  link.href = url;
+  link.download = filename;
+
+  document.body.appendChild(link);
+
+  link.click();
+
+  document.body.removeChild(link);
+
+  URL.revokeObjectURL(url);
+}
+
+function buildRouteExportSamples() {
+  if (routeSamples.length > 1) {
+    return routeSamples;
+  }
+
+  return waypoints;
+}
+
+function exportRouteAsCsv() {
+  if (waypoints.length < 2) {
+    showCoordinateSearchMessage(
+      '<span class="lang-zh">至少需要 2 個路徑點才能匯出路線</span>' +
+      '<span class="lang-en">At Least 2 Waypoints Are Required to Export a Traverse</span>',
+      "#ff6b6b"
+    );
+
+    return;
+  }
+
+  const samples =
+    buildRouteExportSamples();
+
+  const lines = [
+    "Index,Latitude_deg,Longitude_deg,Elevation_m,CumulativeDistance_m,Slope_deg"
+  ];
+
+  samples.forEach(
+    (sample, index) => {
+      lines.push(
+        [
+          index,
+          sample.latitudeDegrees.toFixed(6),
+          sample.longitudeDegrees.toFixed(6),
+          sample.elevationMeters.toFixed(2),
+          (
+            sample.cumulativeDistanceMeters ??
+            0
+          ).toFixed(2),
+          (
+            sample.slopeDegrees ??
+            0
+          ).toFixed(2)
+        ].join(",")
+      );
+    }
+  );
+
+  downloadTextFile(
+    `lunar-rover-traverse-${Date.now()}.csv`,
+    "text/csv;charset=utf-8;",
+    lines.join("\n")
+  );
+
+  showCoordinateSearchMessage(
+    '<span class="lang-zh">路線已匯出為 CSV</span>' +
+    '<span class="lang-en">Traverse Exported as CSV</span>',
+    "#42ff78"
+  );
+}
+
+function exportRouteAsGeoJson() {
+  if (waypoints.length < 2) {
+    showCoordinateSearchMessage(
+      '<span class="lang-zh">至少需要 2 個路徑點才能匯出路線</span>' +
+      '<span class="lang-en">At Least 2 Waypoints Are Required to Export a Traverse</span>',
+      "#ff6b6b"
+    );
+
+    return;
+  }
+
+  const samples =
+    buildRouteExportSamples();
+
+  const geoJson = {
+    type: "Feature",
+
+    properties: {
+      name:
+        "Lunar Rover Traverse - Nobile Rim 2",
+
+      waypointCount:
+        waypoints.length,
+
+      sampleCount:
+        samples.length,
+
+      surfaceDistanceMeters:
+        enhancedRouteAnalysis?.surfaceDistanceMeters ??
+        null,
+
+      maximumSlopeDegrees:
+        enhancedRouteAnalysis?.maximumSlopeDegrees ??
+        null
+    },
+
+    geometry: {
+      type: "LineString",
+
+      coordinates:
+        samples.map(
+          (sample) => [
+            Number(
+              sample.longitudeDegrees.toFixed(6)
+            ),
+
+            Number(
+              sample.latitudeDegrees.toFixed(6)
+            ),
+
+            Number(
+              sample.elevationMeters.toFixed(2)
+            )
+          ]
+        )
+    }
+  };
+
+  downloadTextFile(
+    `lunar-rover-traverse-${Date.now()}.geojson`,
+    "application/geo+json;charset=utf-8;",
+    JSON.stringify(
+      geoJson,
+      null,
+      2
+    )
+  );
+
+  showCoordinateSearchMessage(
+    '<span class="lang-zh">路線已匯出為 GeoJSON</span>' +
+    '<span class="lang-en">Traverse Exported as GeoJSON</span>',
+    "#42ff78"
+  );
+}
+
+// ======================================================
+// 52B. 路線儲存與讀取（Route Save and Load）
+// ======================================================
+
+const SAVED_ROUTE_STORAGE_KEY =
+  "lunar-terrain-saved-route-v1";
+
+function saveRouteToLocalStorage() {
+  if (waypoints.length === 0) {
+    showCoordinateSearchMessage(
+      '<span class="lang-zh">尚未設定任何路徑點，無法儲存</span>' +
+      '<span class="lang-en">No Waypoints Set — Nothing to Save</span>',
+      "#ff6b6b"
+    );
+
+    return;
+  }
+
+  const payload = {
+    savedAt: Date.now(),
+
+    points:
+      waypoints.map(
+        (point) => ({
+          latitudeDegrees:
+            point.latitudeDegrees,
+
+          longitudeDegrees:
+            point.longitudeDegrees
+        })
+      )
+  };
+
+  try {
+    window.localStorage.setItem(
+      SAVED_ROUTE_STORAGE_KEY,
+      JSON.stringify(payload)
+    );
+
+    showCoordinateSearchMessage(
+      '<span class="lang-zh">路線已儲存至本機瀏覽器</span>' +
+      '<span class="lang-en">Traverse Saved to This Browser</span>',
+      "#42ff78"
+    );
+  } catch (error) {
+    showCoordinateSearchMessage(
+      '<span class="lang-zh">儲存失敗，瀏覽器儲存空間可能已滿</span>' +
+      '<span class="lang-en">Save Failed — Browser Storage May Be Full</span>',
+      "#ff6b6b"
+    );
+  }
+}
+
+function loadRouteFromLocalStorage() {
+  if (
+    !terrain ||
+    !terrainMetadata
+  ) {
+    showCoordinateSearchMessage(
+      "地形尚未載入完成 (Terrain Not Yet Loaded)",
+      "#ffd84a"
+    );
+
+    return;
+  }
+
+  let payload = null;
+
+  try {
+    const raw =
+      window.localStorage.getItem(
+        SAVED_ROUTE_STORAGE_KEY
+      );
+
+    payload =
+      raw
+        ? JSON.parse(raw)
+        : null;
+  } catch (error) {
+    payload = null;
+  }
+
+  if (
+    !payload ||
+    !Array.isArray(payload.points) ||
+    payload.points.length === 0
+  ) {
+    showCoordinateSearchMessage(
+      '<span class="lang-zh">沒有已儲存的路線</span>' +
+      '<span class="lang-en">No Saved Traverse Found</span>',
+      "#ff6b6b"
+    );
+
+    return;
+  }
+
+  const restoredPoints =
+    payload.points
+      .map(
+        (entry) =>
+          createPointDataFromGeographicCoordinates(
+            entry.latitudeDegrees,
+            entry.longitudeDegrees
+          )
+      )
+      .filter(
+        (point) => point !== null
+      );
+
+  if (restoredPoints.length === 0) {
+    showCoordinateSearchMessage(
+      '<span class="lang-zh">已儲存的路線座標超出目前地形範圍</span>' +
+      '<span class="lang-en">Saved Traverse Coordinates Are Outside the Current Terrain</span>',
+      "#ff6b6b"
+    );
+
+    return;
+  }
+
+  waypoints = restoredPoints;
+  selectedWaypointIndex = null;
+
+  rebuildWaypointMarkers();
+  showCoordinateInformation();
+
+  if (waypoints.length >= 2) {
+    buildAndAnalyzeRoute();
+  } else {
+    updateMissionWaitingPanel();
+  }
+
+  const isPartial =
+    restoredPoints.length <
+    payload.points.length;
+
+  showCoordinateSearchMessage(
+    isPartial
+      ? '<span class="lang-zh">路線已載入（部分座標超出範圍已略過）</span>' +
+        '<span class="lang-en">Traverse Loaded (Some Points Outside Range Were Skipped)</span>'
+      : '<span class="lang-zh">路線已載入</span>' +
+        '<span class="lang-en">Traverse Loaded</span>',
+    isPartial
+      ? "#ffcc55"
+      : "#42ff78"
+  );
 }
 
 // ======================================================
@@ -8110,9 +8884,19 @@ function handleTerrainClick(
   clickMarker.visible =
     true;
 
-  waypoints.push(
-    correctedPoint
-  );
+  if (selectedWaypointIndex !== null) {
+    waypoints.splice(
+      selectedWaypointIndex + 1,
+      0,
+      correctedPoint
+    );
+
+    selectedWaypointIndex = null;
+  } else {
+    waypoints.push(
+      correctedPoint
+    );
+  }
 
   rebuildWaypointMarkers();
 
