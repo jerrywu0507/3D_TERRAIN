@@ -80,6 +80,9 @@ let terrainElevations = null;
 let terrainWidthKm = 0;
 let terrainDepthKm = 0;
 
+let terrainCenterLatitudeDegrees = null;
+let terrainCenterLongitudeDegrees = null;
+
 let normalTerrainColors = null;
 let slopeTerrainColors = null;
 let elevationTerrainColors = null;
@@ -1433,6 +1436,168 @@ const moonOverviewAxis =
 moonOverviewGroup.add(
   moonOverviewAxis
 );
+
+function convertLatLonToMoonOverviewPosition(
+  latitudeDegrees,
+  longitudeDegrees,
+  radius
+) {
+  const theta =
+    THREE.MathUtils.degToRad(
+      90 - latitudeDegrees
+    );
+
+  const phi =
+    THREE.MathUtils.degToRad(
+      longitudeDegrees + 180
+    );
+
+  const y =
+    radius *
+    Math.cos(theta);
+
+  const ringRadius =
+    Math.sqrt(
+      radius * radius -
+      y * y
+    );
+
+  return new THREE.Vector3(
+    -ringRadius * Math.cos(phi),
+    y,
+    ringRadius * Math.sin(phi)
+  );
+}
+
+function createMoonOverviewFlagMarker(
+  color
+) {
+  const group =
+    new THREE.Group();
+
+  const poleHeight = 0.22;
+  const poleRadius = 0.008;
+
+  const pole =
+    new THREE.Mesh(
+      new THREE.CylinderGeometry(
+        poleRadius,
+        poleRadius,
+        poleHeight,
+        8
+      ),
+      new THREE.MeshBasicMaterial({
+        color: 0xdddddd
+      })
+    );
+
+  pole.position.y =
+    poleHeight / 2;
+
+  group.add(pole);
+
+  const bannerWidth = 0.13;
+  const bannerHeight = 0.08;
+  const bannerThickness = 0.015;
+
+  const bannerShape =
+    new THREE.Shape();
+
+  bannerShape.moveTo(
+    0,
+    bannerHeight / 2
+  );
+
+  bannerShape.lineTo(
+    bannerWidth,
+    0
+  );
+
+  bannerShape.lineTo(
+    0,
+    -bannerHeight / 2
+  );
+
+  bannerShape.lineTo(
+    0,
+    bannerHeight / 2
+  );
+
+  const banner =
+    new THREE.Mesh(
+      new THREE.ExtrudeGeometry(
+        bannerShape,
+        {
+          depth: bannerThickness,
+          bevelEnabled: false
+        }
+      ),
+      new THREE.MeshBasicMaterial({
+        color,
+        side: THREE.DoubleSide
+      })
+    );
+
+  banner.position.set(
+    poleRadius,
+    poleHeight * 0.62,
+    -bannerThickness / 2
+  );
+
+  group.add(banner);
+
+  return group;
+}
+
+const moonOverviewCenterMarker =
+  createMoonOverviewFlagMarker(
+    0xff3333
+  );
+
+moonOverviewCenterMarker.visible = false;
+
+moonOverviewGroup.add(
+  moonOverviewCenterMarker
+);
+
+const MOON_OVERVIEW_UP =
+  new THREE.Vector3(
+    0,
+    1,
+    0
+  );
+
+function updateMoonOverviewCenterMarker() {
+  if (
+    terrainCenterLatitudeDegrees === null ||
+    terrainCenterLongitudeDegrees === null
+  ) {
+    return;
+  }
+
+  const surfacePosition =
+    convertLatLonToMoonOverviewPosition(
+      terrainCenterLatitudeDegrees,
+      terrainCenterLongitudeDegrees,
+      1
+    );
+
+  const outwardDirection =
+    surfacePosition
+      .clone()
+      .normalize();
+
+  moonOverviewCenterMarker.position.copy(
+    surfacePosition
+  );
+
+  moonOverviewCenterMarker.quaternion.setFromUnitVectors(
+    MOON_OVERVIEW_UP,
+    outwardDirection
+  );
+
+  moonOverviewCenterMarker.visible = true;
+}
 
 const moonOverviewPanel = createPanel({
   top: "270px",
@@ -3721,6 +3886,16 @@ function updateStatusPanel() {
       centerMoonRadiusMeters,
       CENTRAL_MERIDIAN_DEGREES
     );
+
+  terrainCenterLatitudeDegrees =
+    centerGeographic.latitudeDegrees;
+
+  terrainCenterLongitudeDegrees =
+    normalizeLongitude(
+      centerGeographic.longitudeDegrees
+    );
+
+  updateMoonOverviewCenterMarker();
 
   statusPanel.innerHTML = wrapBilingualText(`
     <strong>
