@@ -185,7 +185,7 @@ viewHelper.setLabels(
   "Z"
 );
 
-const viewHelperClock = new THREE.Clock();
+const viewHelperTimer = new THREE.Timer();
 
 renderer.autoClear = false;
 
@@ -5223,9 +5223,11 @@ function animate() {
     renderMoonOverview();
   }
 
+  viewHelperTimer.update();
+
   if (viewHelper.animating) {
     viewHelper.update(
-      viewHelperClock.getDelta()
+      viewHelperTimer.getDelta()
     );
   }
 
