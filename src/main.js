@@ -23,7 +23,7 @@ const ROUTE_LINE_RADIUS_KM = 0.003;
 
 const MARKER_RADIUS_KM = 0.008;
 const MARKER_SURFACE_GAP_KM = 0.001;
-const FLAG_MARKER_SCALE = 1.6;
+const FLAG_MARKER_SCALE = 3.2;
 
 const NAMED_POINT_LATITUDE_DEGREES = -84.122515;
 const NAMED_POINT_LONGITUDE_DEGREES = 57.725892;
@@ -100,6 +100,7 @@ let waypointDragMoved = false;
 
 let routeLine = null;
 let routeSamples = [];
+let routeSlopeColoringEnabled = false;
 
 let namedPointMarker = null;
 
@@ -6235,6 +6236,7 @@ const ENHANCED_ROUTE_COLOR_SAFE = 0x36d66b;
 const ENHANCED_ROUTE_COLOR_PASSABLE = 0xd7df3f;
 const ENHANCED_ROUTE_COLOR_WARNING = 0xff8c2a;
 const ENHANCED_ROUTE_COLOR_UNSAFE = 0xff3b30;
+const ENHANCED_ROUTE_COLOR_DEFAULT = 0x00e5ff;
 
 const ENHANCED_HAZARD_MARKER_RADIUS_KM = 0.012;
 const ENHANCED_HAZARD_MARKER_GAP_KM = 0.004;
@@ -6364,6 +6366,18 @@ enhancedRouteProfilePanel.innerHTML = wrapBilingualText(`
     and Hazardous Sections.)
   </span>
 
+  <div class="layer-header">
+    <strong>
+      坡度安全分色
+      (Slope Safety Coloring)
+    </strong>
+
+    <label class="layer-switch">
+      <input id="route-slope-color-toggle" type="checkbox">
+      <span class="layer-slider"></span>
+    </label>
+  </div>
+
   <canvas
     id="enhanced-route-profile-canvas"
     class="enhanced-route-profile-canvas"
@@ -6444,6 +6458,27 @@ const enhancedProfileInformation =
   document.querySelector(
     "#enhanced-profile-information"
   );
+
+const routeSlopeColorToggle =
+  document.querySelector(
+    "#route-slope-color-toggle"
+  );
+
+routeSlopeColorToggle.addEventListener(
+  "change",
+  () => {
+    routeSlopeColoringEnabled =
+      routeSlopeColorToggle.checked;
+
+    if (routeSamples.length >= 2) {
+      removeRouteLine();
+
+      createEnhancedColoredRoute(
+        routeSamples
+      );
+    }
+  }
+);
 
 // 加入原本的介面控制系統
 managedPanels.push({
@@ -6686,13 +6721,13 @@ function analyzeRoute(
     let slopeDegrees = 0;
 
     if (
-      horizontalDistanceMeters > 0
+      segmentHorizontalDistanceMeters > 0
     ) {
       signedSlopeDegrees =
         THREE.MathUtils.radToDeg(
           Math.atan2(
             elevationDifferenceMeters,
-            horizontalDistanceMeters
+            segmentHorizontalDistanceMeters
           )
         );
 
@@ -6859,9 +6894,11 @@ function createEnhancedColoredRoute(
     const material =
       new THREE.MeshBasicMaterial({
         color:
-          getEnhancedRouteSlopeColorHex(
-            current.slopeDegrees
-          ),
+          routeSlopeColoringEnabled
+            ? getEnhancedRouteSlopeColorHex(
+                current.slopeDegrees
+              )
+            : ENHANCED_ROUTE_COLOR_DEFAULT,
 
         depthTest: true,
         depthWrite: false
