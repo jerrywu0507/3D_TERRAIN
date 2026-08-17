@@ -8771,6 +8771,8 @@ function resetMissionRoute() {
 
   rebuildWaypointMarkers();
 
+  clickMarker.visible = false;
+
   routeSamples = [];
 
   enhancedRouteAnalysis =
