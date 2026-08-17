@@ -125,6 +125,134 @@ let demCleaningStatistics = {
 };
 
 // ======================================================
+// 2A. 地圖讀取畫面（Map Loading Overlay）
+// ======================================================
+
+const loadingOverlayStyle =
+  document.createElement("style");
+
+loadingOverlayStyle.textContent = `
+  .loading-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+    background: #050608;
+    color: #e6ecf5;
+    font-family: Arial, sans-serif;
+    text-align: center;
+    padding: 24px;
+    transition: opacity 0.4s ease;
+  }
+
+  .loading-overlay.is-hidden {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .loading-overlay-spinner {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    border: 4px solid rgba(255, 255, 255, 0.15);
+    border-top-color: #6ea8ff;
+    animation: loading-overlay-spin 0.9s linear infinite;
+  }
+
+  .loading-overlay.has-error .loading-overlay-spinner {
+    display: none;
+  }
+
+  .loading-overlay-title {
+    font-size: 18px;
+    font-weight: bold;
+    letter-spacing: 0.05em;
+  }
+
+  .loading-overlay.has-error .loading-overlay-title {
+    color: #ff6b6b;
+  }
+
+  .loading-overlay-subtitle {
+    font-size: 13px;
+    color: #9fb0c9;
+  }
+
+  @keyframes loading-overlay-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+`;
+
+document.head.appendChild(loadingOverlayStyle);
+
+const loadingOverlay =
+  document.createElement("div");
+
+loadingOverlay.className = "loading-overlay";
+loadingOverlay.id = "loading-overlay";
+
+loadingOverlay.innerHTML = `
+  <div class="loading-overlay-spinner"></div>
+  <div
+    class="loading-overlay-title"
+    id="loading-overlay-title"
+  >
+    地圖載入中 (Loading Map)
+  </div>
+  <div
+    class="loading-overlay-subtitle"
+    id="loading-overlay-subtitle"
+  >
+    Artemis III／Nobile Rim 2 地形資料
+  </div>
+`;
+
+document.body.appendChild(loadingOverlay);
+
+const loadingOverlayTitle =
+  loadingOverlay.querySelector(
+    "#loading-overlay-title"
+  );
+
+const loadingOverlaySubtitle =
+  loadingOverlay.querySelector(
+    "#loading-overlay-subtitle"
+  );
+
+function setLoadingOverlayProgress(percent) {
+  loadingOverlaySubtitle.textContent =
+    `下載地形資料中 (Downloading Terrain Data)… ${percent}%`;
+}
+
+function hideLoadingOverlay() {
+  loadingOverlay.classList.add(
+    "is-hidden"
+  );
+
+  window.setTimeout(() => {
+    loadingOverlay.remove();
+  }, 400);
+}
+
+function showLoadingOverlayError(message) {
+  loadingOverlay.classList.add(
+    "has-error"
+  );
+
+  loadingOverlayTitle.textContent =
+    "地圖載入失敗 (Failed to Load Map)";
+
+  loadingOverlaySubtitle.textContent =
+    message;
+}
+
+// ======================================================
 // 3. 建立 Three.js 場景（Create Three.js Scene）
 // ======================================================
 
@@ -2827,6 +2955,68 @@ function createNamedPointMarker() {
 
 loadTerrainData();
 
+async function readArrayBufferWithProgress(
+  response,
+  onProgress
+) {
+  const totalBytes =
+    Number(
+      response.headers.get(
+        "content-length"
+      )
+    );
+
+  if (
+    !response.body ||
+    !Number.isFinite(totalBytes) ||
+    totalBytes <= 0
+  ) {
+    const buffer =
+      await response.arrayBuffer();
+
+    onProgress(1);
+
+    return buffer;
+  }
+
+  const reader =
+    response.body.getReader();
+
+  const chunks = [];
+  let receivedBytes = 0;
+
+  while (true) {
+    const { done, value } =
+      await reader.read();
+
+    if (done) {
+      break;
+    }
+
+    chunks.push(value);
+    receivedBytes += value.byteLength;
+
+    onProgress(
+      Math.min(
+        receivedBytes / totalBytes,
+        1
+      )
+    );
+  }
+
+  const combined =
+    new Uint8Array(receivedBytes);
+
+  let offset = 0;
+
+  for (const chunk of chunks) {
+    combined.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+
+  return combined.buffer;
+}
+
 async function loadTerrainData() {
   try {
     const cacheBuster =
@@ -2860,12 +3050,21 @@ async function loadTerrainData() {
       await metadataResponse.json();
 
     const buffer =
-      await heightmapResponse.arrayBuffer();
+      await readArrayBufferWithProgress(
+        heightmapResponse,
+        (ratio) => {
+          setLoadingOverlayProgress(
+            Math.round(ratio * 100)
+          );
+        }
+      );
 
     createTerrain(
       metadata,
       buffer
     );
+
+    hideLoadingOverlay();
   } catch (error) {
     console.error(
       "地形載入失敗：",
@@ -2880,6 +3079,10 @@ async function loadTerrainData() {
 
       ${escapeHtml(error.message)}
     `);
+
+    showLoadingOverlayError(
+      escapeHtml(error.message)
+    );
   }
 }
 
