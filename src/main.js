@@ -203,13 +203,13 @@ loadingOverlay.innerHTML = `
     class="loading-overlay-title"
     id="loading-overlay-title"
   >
-    地圖載入中 (Loading Map)
+    Loading Map
   </div>
   <div
     class="loading-overlay-subtitle"
     id="loading-overlay-subtitle"
   >
-    Artemis III／Nobile Rim 2 地形資料
+    Artemis III / Nobile Rim 2 Terrain Data
   </div>
 `;
 
@@ -227,7 +227,7 @@ const loadingOverlaySubtitle =
 
 function setLoadingOverlayProgress(percent) {
   loadingOverlaySubtitle.textContent =
-    `下載地形資料中 (Downloading Terrain Data)… ${percent}%`;
+    `Downloading Terrain Data… ${percent}%`;
 }
 
 function hideLoadingOverlay() {
@@ -246,7 +246,7 @@ function showLoadingOverlayError(message) {
   );
 
   loadingOverlayTitle.textContent =
-    "地圖載入失敗 (Failed to Load Map)";
+    "Failed to Load Map";
 
   loadingOverlaySubtitle.textContent =
     message;
