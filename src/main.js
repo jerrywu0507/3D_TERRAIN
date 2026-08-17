@@ -187,11 +187,92 @@ const viewHelper = new ViewHelper(
   renderer.domElement
 );
 
+// 場景座標對應實際方位：
+// +X＝東（East）／-X＝西（West）
+// +Z＝南（South，朝向極點）／-Z＝北（North，遠離極點）
 viewHelper.setLabels(
-  "X",
-  "Y",
-  "Z"
+  "E",
+  "Up",
+  "S"
 );
+
+function createDirectionLabelSpriteMaterial(
+  fillColor,
+  text,
+  opacity
+) {
+  const canvas =
+    document.createElement("canvas");
+
+  canvas.width = 64;
+  canvas.height = 64;
+
+  const context =
+    canvas.getContext("2d");
+
+  context.beginPath();
+  context.arc(
+    32,
+    32,
+    14,
+    0,
+    Math.PI * 2
+  );
+  context.closePath();
+  context.fillStyle = fillColor;
+  context.fill();
+
+  context.font = "24px Arial";
+  context.textAlign = "center";
+  context.fillStyle = "#ffffff";
+  context.fillText(text, 32, 41);
+
+  const texture =
+    new THREE.CanvasTexture(canvas);
+
+  texture.colorSpace =
+    THREE.SRGBColorSpace;
+
+  const material =
+    new THREE.SpriteMaterial({
+      map: texture,
+      toneMapped: false
+    });
+
+  material.opacity = opacity;
+
+  return material;
+}
+
+const negativeXAxisHelper =
+  viewHelper.children.find(
+    (child) =>
+      child.userData?.type === "negX"
+  );
+
+const negativeZAxisHelper =
+  viewHelper.children.find(
+    (child) =>
+      child.userData?.type === "negZ"
+  );
+
+if (negativeXAxisHelper) {
+  negativeXAxisHelper.material =
+    createDirectionLabelSpriteMaterial(
+      "#ff4466",
+      "W",
+      0.55
+    );
+}
+
+if (negativeZAxisHelper) {
+  negativeZAxisHelper.material =
+    createDirectionLabelSpriteMaterial(
+      "#4488ff",
+      "N",
+      0.55
+    );
+}
 
 const viewHelperTimer = new THREE.Timer();
 
@@ -2142,21 +2223,21 @@ setLocalizedHtml(interfaceControlPanel, `
       id="scale-reset-button"
       class="interface-button"
     >
-      比例重設 (Reset Scale)
+      面板比例重設 (Reset Panel Scale)
     </button>
 
     <button
       id="position-reset-button"
       class="interface-button"
     >
-      位置重設 (Reset Position)
+      面板位置重設 (Reset Panel Position)
     </button>
 
     <button
       id="language-toggle-button"
       class="interface-button"
     >
-      EN
+      Chinese
     </button>
   </div>
 
@@ -2280,8 +2361,8 @@ function updateStaticTitles() {
 
   languageToggleButton.textContent =
     isChinese
-      ? "EN"
-      : "中文";
+      ? "英文"
+      : "Chinese";
 
   languageToggleButton.title =
     isChinese
