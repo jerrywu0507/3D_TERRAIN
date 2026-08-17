@@ -56,8 +56,12 @@ const NAMED_POINT_COLOR = 0x9c27b0;
 const SAFE_SLOPE_DEGREES = 10;
 const WARNING_SLOPE_DEGREES = 15;
 
-const LOCAL_SPIKE_THRESHOLD_METERS = 15;
+const LOCAL_SPIKE_THRESHOLD_METERS = 8;
 const MIN_VALID_NEIGHBOURS = 5;
+const MAX_SPIKE_CLEANUP_PASSES = 4;
+
+const PROMINENT_PEAK_SEARCH_RADIUS_PIXELS = 6;
+const PROMINENT_PEAK_THRESHOLD_METERS = 35;
 
 const DEFAULT_INTERFACE_SCALE = 0.82;
 const MIN_INTERFACE_SCALE = 0.6;
@@ -146,6 +150,7 @@ let demCleaningStatistics = {
   invalidValues: 0,
   repairedInvalidValues: 0,
   spikeValues: 0,
+  prominentPeaksFilled: 0,
   remainingInvalidValues: 0
 };
 
@@ -1874,6 +1879,7 @@ function cleanDemElevations(
     invalidValues: 0,
     repairedInvalidValues: 0,
     spikeValues: 0,
+    prominentPeaksFilled: 0,
     remainingInvalidValues: 0
   };
 
@@ -1955,66 +1961,123 @@ function cleanDemElevations(
       repaired
     );
 
+  // 單一像素雜訊有時會連成 2～3 格的小群集：群集內每個像素的
+  // 緊鄰中位數會被彼此拉高，單一次比對可能偵測不到，因此重複
+  // 執行直到某一輪沒有再修正任何像素為止（最多 MAX_SPIKE_CLEANUP_PASSES 輪）。
   for (
-    let row = 1;
-    row < height - 1;
-    row += 1
+    let pass = 0;
+    pass < MAX_SPIKE_CLEANUP_PASSES;
+    pass += 1
   ) {
+    const passInput =
+      new Float32Array(
+        cleaned
+      );
+
+    let correctedThisPass = 0;
+
     for (
-      let column = 1;
-      column < width - 1;
-      column += 1
+      let row = 1;
+      row < height - 1;
+      row += 1
     ) {
-      const index =
-        row * width + column;
-
-      const centerValue =
-        repaired[index];
-
-      if (
-        !Number.isFinite(
-          centerValue
-        )
+      for (
+        let column = 1;
+        column < width - 1;
+        column += 1
       ) {
-        continue;
-      }
+        const index =
+          row * width + column;
 
-      const neighbours =
-        getNeighbourValues(
-          repaired,
-          width,
-          height,
-          column,
-          row,
-          1
-        );
+        const centerValue =
+          passInput[index];
 
-      if (
-        neighbours.length <
-        MIN_VALID_NEIGHBOURS
-      ) {
-        continue;
-      }
+        if (
+          !Number.isFinite(
+            centerValue
+          )
+        ) {
+          continue;
+        }
 
-      const neighbourMedian =
-        calculateMedian(
-          neighbours
-        );
+        const neighbours =
+          getNeighbourValues(
+            passInput,
+            width,
+            height,
+            column,
+            row,
+            1
+          );
 
-      if (
-        Math.abs(
-          centerValue -
-          neighbourMedian
-        ) >
-        LOCAL_SPIKE_THRESHOLD_METERS
-      ) {
-        cleaned[index] =
-          neighbourMedian;
+        if (
+          neighbours.length <
+          MIN_VALID_NEIGHBOURS
+        ) {
+          continue;
+        }
 
-        demCleaningStatistics
-          .spikeValues += 1;
+        const neighbourMedian =
+          calculateMedian(
+            neighbours
+          );
+
+        if (
+          Math.abs(
+            centerValue -
+            neighbourMedian
+          ) >
+          LOCAL_SPIKE_THRESHOLD_METERS
+        ) {
+          cleaned[index] =
+            neighbourMedian;
+
+          demCleaningStatistics
+            .spikeValues += 1;
+
+          correctedThisPass += 1;
+        }
       }
     }
+
+    if (correctedThisPass === 0) {
+      break;
+    }
+  }
+
+  // 有些雜訊會形成平滑但極窄的「錐狀突起」，內部每個像素彼此
+  // 支撐、緊鄰中位數比對抓不到，因此另外找出「在一定範圍內是
+  // 唯一最高點、且比範圍邊緣高出很多」的孤立尖峰，直接用邊緣
+  // 資料內插填平整個突起範圍，而不是只修正單一像素。
+  const prominentPeaks =
+    findProminentPeaks(
+      cleaned,
+      width,
+      height,
+      PROMINENT_PEAK_SEARCH_RADIUS_PIXELS,
+      PROMINENT_PEAK_THRESHOLD_METERS
+    );
+
+  const preFillSnapshot =
+    new Float32Array(
+      cleaned
+    );
+
+  for (
+    const peak of
+    prominentPeaks
+  ) {
+    demCleaningStatistics
+      .prominentPeaksFilled +=
+      fillPeakFootprint(
+        cleaned,
+        preFillSnapshot,
+        width,
+        height,
+        peak.row,
+        peak.column,
+        PROMINENT_PEAK_SEARCH_RADIUS_PIXELS
+      );
   }
 
   for (
@@ -2033,6 +2096,238 @@ function cleanDemElevations(
   }
 
   return cleaned;
+}
+
+function findProminentPeaks(
+  data,
+  width,
+  height,
+  radius,
+  prominenceThresholdMeters
+) {
+  const peaks = [];
+
+  for (
+    let row = radius;
+    row < height - radius;
+    row += 1
+  ) {
+    for (
+      let column = radius;
+      column < width - radius;
+      column += 1
+    ) {
+      const centerValue =
+        data[row * width + column];
+
+      if (
+        !Number.isFinite(
+          centerValue
+        )
+      ) {
+        continue;
+      }
+
+      let isLocalMaximum = true;
+      const edgeRingValues = [];
+
+      for (
+        let dy = -radius;
+        dy <= radius;
+        dy += 1
+      ) {
+        for (
+          let dx = -radius;
+          dx <= radius;
+          dx += 1
+        ) {
+          if (dx === 0 && dy === 0) {
+            continue;
+          }
+
+          const neighbourValue =
+            data[
+              (row + dy) * width +
+              (column + dx)
+            ];
+
+          if (
+            !Number.isFinite(
+              neighbourValue
+            )
+          ) {
+            isLocalMaximum = false;
+
+            continue;
+          }
+
+          if (neighbourValue > centerValue) {
+            isLocalMaximum = false;
+          }
+
+          if (
+            Math.max(
+              Math.abs(dx),
+              Math.abs(dy)
+            ) === radius
+          ) {
+            edgeRingValues.push(
+              neighbourValue
+            );
+          }
+        }
+      }
+
+      if (
+        !isLocalMaximum ||
+        edgeRingValues.length < MIN_VALID_NEIGHBOURS
+      ) {
+        continue;
+      }
+
+      const edgeMedian =
+        calculateMedian(
+          edgeRingValues
+        );
+
+      if (
+        centerValue - edgeMedian >
+        prominenceThresholdMeters
+      ) {
+        peaks.push({
+          row,
+          column
+        });
+      }
+    }
+  }
+
+  return peaks;
+}
+
+function fillPeakFootprint(
+  target,
+  source,
+  width,
+  height,
+  peakRow,
+  peakColumn,
+  radius
+) {
+  const anchors = [];
+
+  for (
+    let dy = -radius;
+    dy <= radius;
+    dy += 1
+  ) {
+    for (
+      let dx = -radius;
+      dx <= radius;
+      dx += 1
+    ) {
+      if (
+        Math.round(
+          Math.hypot(dx, dy)
+        ) !== radius
+      ) {
+        continue;
+      }
+
+      const row = peakRow + dy;
+      const column = peakColumn + dx;
+
+      if (
+        row < 0 ||
+        row >= height ||
+        column < 0 ||
+        column >= width
+      ) {
+        continue;
+      }
+
+      const value =
+        source[row * width + column];
+
+      if (!Number.isFinite(value)) {
+        continue;
+      }
+
+      anchors.push({
+        dx,
+        dy,
+        value
+      });
+    }
+  }
+
+  if (anchors.length < MIN_VALID_NEIGHBOURS) {
+    return 0;
+  }
+
+  let filledCount = 0;
+
+  for (
+    let dy = -radius;
+    dy <= radius;
+    dy += 1
+  ) {
+    for (
+      let dx = -radius;
+      dx <= radius;
+      dx += 1
+    ) {
+      const distance =
+        Math.hypot(dx, dy);
+
+      if (distance > radius) {
+        continue;
+      }
+
+      const row = peakRow + dy;
+      const column = peakColumn + dx;
+
+      if (
+        row < 0 ||
+        row >= height ||
+        column < 0 ||
+        column >= width
+      ) {
+        continue;
+      }
+
+      let weightSum = 0;
+      let valueSum = 0;
+
+      for (
+        const anchor of
+        anchors
+      ) {
+        const anchorDistance =
+          Math.max(
+            Math.hypot(
+              dx - anchor.dx,
+              dy - anchor.dy
+            ),
+            0.5
+          );
+
+        const weight =
+          1 /
+          (anchorDistance * anchorDistance);
+
+        weightSum += weight;
+        valueSum += weight * anchor.value;
+      }
+
+      target[row * width + column] =
+        valueSum / weightSum;
+
+      filledCount += 1;
+    }
+  }
+
+  return filledCount;
 }
 
 function isRawDemValueValid(value) {
@@ -2851,6 +3146,9 @@ function updateStatusPanel() {
 
     ｜尖峰修正 (Spike Correction)：
     ${demCleaningStatistics.spikeValues}
+
+    ｜孤立突起填平 (Prominent Peaks Filled)：
+    ${demCleaningStatistics.prominentPeaksFilled}
 
     ｜剩餘無效 (Remaining Invalid)：
     ${demCleaningStatistics.remainingInvalidValues}
