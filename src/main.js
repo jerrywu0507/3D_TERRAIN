@@ -26,6 +26,20 @@ import {
 
 import { createMoonOverview } from "./moon-overview.js";
 
+import {
+  formatKm,
+  formatSignedNumber,
+  escapeHtml
+} from "./utils.js";
+
+import {
+  initMarkers,
+  createSphereMarker,
+  createFlagMarker,
+  disposeMarkerObject,
+  getWaypointMarkerColor
+} from "./markers.js";
+
 // ======================================================
 // 1. 基本設定（Basic Settings）
 // ======================================================
@@ -1162,8 +1176,14 @@ makePanelDraggable(
 );
 
 // ======================================================
-// 17. 建立標記（Create Markers）
+// 17. 建立標記（Create Markers）— 幾何建構工具移至 markers.js
 // ======================================================
+
+initMarkers({
+  scene,
+  markerRadiusKm: MARKER_RADIUS_KM,
+  flagMarkerScale: FLAG_MARKER_SCALE
+});
 
 const clickMarker =
   createSphereMarker(0xff9500);
@@ -1171,38 +1191,6 @@ const clickMarker =
 clickMarker.visible = false;
 
 scene.add(clickMarker);
-
-const WAYPOINT_START_COLOR = 0x00ff66;
-const WAYPOINT_DESTINATION_COLOR = 0xff3333;
-const WAYPOINT_INTERMEDIATE_COLOR = 0xffcc33;
-
-function getWaypointMarkerColor(index, total) {
-  if (index === 0) {
-    return WAYPOINT_START_COLOR;
-  }
-
-  if (index === total - 1) {
-    return WAYPOINT_DESTINATION_COLOR;
-  }
-
-  return WAYPOINT_INTERMEDIATE_COLOR;
-}
-
-function disposeMarkerObject(marker) {
-  scene.remove(marker);
-
-  marker.traverse((child) => {
-    child.geometry?.dispose();
-
-    if (Array.isArray(child.material)) {
-      for (const material of child.material) {
-        material.dispose();
-      }
-    } else {
-      child.material?.dispose();
-    }
-  });
-}
 
 function rebuildWaypointMarkers() {
   for (const marker of waypointMarkers) {
@@ -1249,140 +1237,6 @@ function getWaypointDisplayLabelParts(index) {
     zh: `路徑點 ${index}`,
     en: `Waypoint ${index}`
   };
-}
-
-function createSphereMarker(color) {
-  const geometry =
-    new THREE.SphereGeometry(
-      MARKER_RADIUS_KM,
-      24,
-      24
-    );
-
-  const material =
-    new THREE.MeshBasicMaterial({
-      color,
-      depthTest: false,
-      depthWrite: false
-    });
-
-  const marker =
-    new THREE.Mesh(
-      geometry,
-      material
-    );
-
-  marker.renderOrder = 10;
-
-  return marker;
-}
-
-function createFlagMarker(color) {
-  const group = new THREE.Group();
-
-  const poleHeightKm =
-    MARKER_RADIUS_KM * 3 * FLAG_MARKER_SCALE;
-
-  const poleRadiusKm =
-    MARKER_RADIUS_KM * 0.12 * FLAG_MARKER_SCALE;
-
-  const poleGeometry =
-    new THREE.CylinderGeometry(
-      poleRadiusKm,
-      poleRadiusKm,
-      poleHeightKm,
-      8
-    );
-
-  const poleMaterial =
-    new THREE.MeshBasicMaterial({
-      color: 0xdddddd,
-      depthTest: false,
-      depthWrite: false
-    });
-
-  const pole =
-    new THREE.Mesh(
-      poleGeometry,
-      poleMaterial
-    );
-
-  pole.position.y =
-    poleHeightKm / 2;
-
-  pole.renderOrder = 10;
-
-  group.add(pole);
-
-  const bannerWidthKm =
-    MARKER_RADIUS_KM * 1.8 * FLAG_MARKER_SCALE;
-
-  const bannerHeightKm =
-    MARKER_RADIUS_KM * 1.1 * FLAG_MARKER_SCALE;
-
-  const bannerThicknessKm =
-    MARKER_RADIUS_KM * 0.25 * FLAG_MARKER_SCALE;
-
-  const bannerShape =
-    new THREE.Shape();
-
-  bannerShape.moveTo(
-    0,
-    bannerHeightKm / 2
-  );
-
-  bannerShape.lineTo(
-    bannerWidthKm,
-    0
-  );
-
-  bannerShape.lineTo(
-    0,
-    -bannerHeightKm / 2
-  );
-
-  bannerShape.lineTo(
-    0,
-    bannerHeightKm / 2
-  );
-
-  const bannerGeometry =
-    new THREE.ExtrudeGeometry(
-      bannerShape,
-      {
-        depth: bannerThicknessKm,
-        bevelEnabled: false
-      }
-    );
-
-  const bannerMaterial =
-    new THREE.MeshBasicMaterial({
-      color,
-      depthTest: false,
-      depthWrite: false,
-      side: THREE.DoubleSide
-    });
-
-  const banner =
-    new THREE.Mesh(
-      bannerGeometry,
-      bannerMaterial
-    );
-
-  banner.position.set(
-    poleRadiusKm,
-    poleHeightKm * 0.62,
-    -bannerThicknessKm / 2
-  );
-
-  banner.renderOrder = 10;
-
-  group.add(banner);
-
-  group.userData.isFlagMarker =
-    true;
-
-  return group;
 }
 
 function createNamedPointMarker() {
@@ -4756,58 +4610,8 @@ function getStatusStyle(
 }
 
 // ======================================================
-// 35. 工具函式（Utility Functions）
+// 35. 工具函式（Utility Functions）— 定義移至 utils.js
 // ======================================================
-
-function formatKm(
-  meters,
-  digits = 3
-) {
-  return (
-    meters /
-    1000
-  ).toFixed(
-    digits
-  );
-}
-
-function formatSignedNumber(
-  value,
-  digits = 1
-) {
-  return (
-    value > 0
-      ? "+"
-      : ""
-  ) +
-  value.toFixed(
-    digits
-  );
-}
-
-function escapeHtml(value) {
-  return String(value)
-    .replaceAll(
-      "&",
-      "&amp;"
-    )
-    .replaceAll(
-      "<",
-      "&lt;"
-    )
-    .replaceAll(
-      ">",
-      "&gt;"
-    )
-    .replaceAll(
-      '"',
-      "&quot;"
-    )
-    .replaceAll(
-      "'",
-      "&#039;"
-    );
-}
 
 // ======================================================
 // 36. 鍵盤快捷鍵（Keyboard Shortcuts）
