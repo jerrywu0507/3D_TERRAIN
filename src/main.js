@@ -7,7 +7,10 @@ import {
   showLoadingOverlayError
 } from "./loading-overlay.js";
 
-import { createViewGizmo } from "./view-gizmo.js";
+import {
+  createViewGizmo,
+  setViewGizmoCompassCorrection
+} from "./view-gizmo.js";
 
 import {
   initUiCore,
@@ -57,11 +60,11 @@ const CENTRAL_MERIDIAN_DEGREES = 0;
 
 const ROUTE_SAMPLE_INTERVAL_METERS = 5;
 const ROUTE_SURFACE_OFFSET_KM = 0.0001;
-const ROUTE_LINE_RADIUS_KM = 0.003;
+const ROUTE_LINE_RADIUS_KM = 0.006;
 
 const MARKER_RADIUS_KM = 0.008;
 const MARKER_SURFACE_GAP_KM = 0.001;
-const FLAG_MARKER_SCALE = 3.2;
+const FLAG_MARKER_SCALE = 6.4;
 
 const NAMED_POINT_LATITUDE_DEGREES = -84.122515;
 const NAMED_POINT_LONGITUDE_DEGREES = 57.725892;
@@ -2940,6 +2943,12 @@ function updateStatusPanel() {
     terrainCenterLongitudeDegrees
   );
 
+  setViewGizmoCompassCorrection(
+    viewHelper,
+    terrainCenterLongitudeDegrees -
+      CENTRAL_MERIDIAN_DEGREES
+  );
+
   statusPanel.innerHTML = wrapBilingualText(`
     <strong>
       Artemis III／Nobile Rim 2 數位高程模型
@@ -4787,7 +4796,7 @@ const ENHANCED_ROUTE_COLOR_SAFE = 0x36d66b;
 const ENHANCED_ROUTE_COLOR_PASSABLE = 0xd7df3f;
 const ENHANCED_ROUTE_COLOR_WARNING = 0xff8c2a;
 const ENHANCED_ROUTE_COLOR_UNSAFE = 0xff3b30;
-const ENHANCED_ROUTE_COLOR_DEFAULT = 0x00e5ff;
+const ENHANCED_ROUTE_COLOR_DEFAULT = 0x000000;
 
 const ENHANCED_HAZARD_MARKER_RADIUS_KM = 0.012;
 const ENHANCED_HAZARD_MARKER_GAP_KM = 0.004;
