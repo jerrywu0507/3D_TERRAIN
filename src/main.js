@@ -2955,6 +2955,28 @@ function updateStatusPanel() {
       (Digital Elevation Model, DEM)
     </strong><br>
 
+    <span style="color:#9db3c8;font-size:12px;">
+      資料來源 (Data Source)：NASA GSFC PGDA — Bertone et al.,
+      "Enhanced Topography Models for Selected Lunar South Pole
+      Regions with Shape-from-Shading,"
+      <em>The Planetary Science Journal</em>
+      (DOI:
+      <a
+        href="https://doi.org/10.3847/PSJ/ae5b70"
+        target="_blank"
+        rel="noopener noreferrer"
+        style="color:#7ec8ff;"
+      >10.3847/PSJ/ae5b70</a>)；
+      基礎測高資料 (Baseline Altimetry)：LOLA — Barker et al. 2023
+      (DOI:
+      <a
+        href="https://doi.org/10.3847/PSJ/acf3e1"
+        target="_blank"
+        rel="noopener noreferrer"
+        style="color:#7ec8ff;"
+      >10.3847/PSJ/acf3e1</a>)
+    </span><br>
+
     顯示網格 (Display Grid)：
     ${width} × ${height}
 
@@ -4837,6 +4859,7 @@ enhancedRouteStyle.textContent = `
   .enhanced-route-profile-canvas {
     display: block;
     width: 100%;
+    max-width: 100%;
     height: auto;
     margin-top: 9px;
     background: rgba(4, 7, 12, 0.98);
@@ -4907,6 +4930,7 @@ const enhancedRouteProfilePanel =
     width: "650px",
     maxHeight: "52vh",
     overflowY: "auto",
+    overflowX: "hidden",
     zIndex: "45",
     pointerEvents: "auto",
     userSelect: "none"
@@ -6133,7 +6157,8 @@ function drawEnhancedProfileTriangleMarker(
 function drawEnhancedRouteProfile(
   samples,
   analysis,
-  highlightedIndex = null
+  highlightedIndex = null,
+  highlightedDistanceMeters = null
 ) {
   const canvas =
     enhancedRouteProfileCanvas;
@@ -6656,10 +6681,18 @@ function drawEnhancedRouteProfile(
         highlightedIndex
       ];
 
+    // 白線本身用滑鼠對應的連續距離（而非吸附後的取樣點距離）
+    // 定位，才會跟滑鼠水平位置完全同步、不會有吸附感；曲線上
+    // 的圓點仍用最近取樣點的高程，兩者相差不到半個取樣間距
+    // （5 公尺），視覺上不會有落差。
     const selectedX =
       xFromDistance(
-        selectedSample
-          .cumulativeDistanceMeters
+        Number.isFinite(
+          highlightedDistanceMeters
+        )
+          ? highlightedDistanceMeters
+          : selectedSample
+              .cumulativeDistanceMeters
       );
 
     const selectedY =
@@ -6976,10 +7009,43 @@ function showEnhancedProfileSummary(
   `);
 }
 
+let pendingProfilePointerEvent = null;
+let profilePointerFrameScheduled = false;
+
+// 剖面圖懸停時，滑鼠原生 pointermove 事件頻率可能遠高於畫面更新
+// 頻率，這裡改成只記住最新的事件，每個動畫影格最多重新計算／
+// 重畫一次，避免滑鼠一晃就整套（線性掃描＋重建面板＋重畫 canvas）
+// 跑好幾次造成卡頓。
 function handleEnhancedProfilePointerMove(
   event
 ) {
+  pendingProfilePointerEvent =
+    event;
+
   if (
+    profilePointerFrameScheduled
+  ) {
+    return;
+  }
+
+  profilePointerFrameScheduled =
+    true;
+
+  requestAnimationFrame(() => {
+    profilePointerFrameScheduled =
+      false;
+
+    processEnhancedProfilePointerMove(
+      pendingProfilePointerEvent
+    );
+  });
+}
+
+function processEnhancedProfilePointerMove(
+  event
+) {
+  if (
+    !event ||
     !enhancedRouteAnalysis ||
     routeSamples.length < 2
   ) {
@@ -7121,18 +7187,27 @@ function handleEnhancedProfilePointerMove(
   drawEnhancedRouteProfile(
     routeSamples,
     enhancedRouteAnalysis,
-    nearestIndex
+    nearestIndex,
+    targetDistanceMeters
   );
 }
 
-enhancedRouteProfileCanvas.addEventListener(
+// 監聽整個面板而不是只監聽 canvas 本身：canvas 貼齊面板邊緣，
+// 滑鼠只要移出 canvas 一點點（哪怕還在面板內的留白／邊框上）
+// pointermove 就會停止觸發，白色追蹤線因此卡住走不到最右／
+// 最左。改成監聽面板後，只要滑鼠還在面板範圍內，就會持續依照
+// 下面既有的 clamp 邏輯貼齊圖表最近的一端。
+enhancedRouteProfilePanel.addEventListener(
   "pointermove",
   handleEnhancedProfilePointerMove
 );
 
-enhancedRouteProfileCanvas.addEventListener(
+enhancedRouteProfilePanel.addEventListener(
   "pointerleave",
   () => {
+    pendingProfilePointerEvent =
+      null;
+
     if (
       enhancedRouteAnalysis
     ) {
