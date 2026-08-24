@@ -11,7 +11,7 @@ pipeline.
 |---|---|
 | Region | Nobile Rim 2 (Artemis III candidate landing region) |
 | Site code in source archive | `DM2` |
-| Local file name | `Nobile_Rim2_MissionArea_10km_5m_v3.tif` (a cropped ~10 km × 10 km subset of the full-site file, see section 3) |
+| Local file name | `Nobile_Rim2_MissionArea_10km_5m_v3.tif` (a cropped ~10 km × 10 km subset of the full-site file, see section 6) |
 | Resolution | 5 m / pixel |
 | Coverage | approx. 10 km × 10 km |
 | Map projection | South Polar Stereographic (metres) |
@@ -76,7 +76,84 @@ Beta Plateau (`Site20`/`Site20v2`), Malapert Massif (`Site23`), de
 Gerlache-Kocher Massif (`Site42`), Faustini Rim A (`LM7`), Amundsen Rim
 (`DM1`), Haworth, and Shackleton-/Shoemaker-rim variants (`LM1`–`LM8`).
 
-## 3. How to Get Data for a Different Landing Site
+## 3. Data Quality and Limitations
+
+This is real measured topography, not a synthetic or fully-interpolated
+surface — but it is important to understand how much of it is direct
+measurement versus interpolation before treating fine detail as reliable:
+
+- **LOLA ground-track spacing is sparse near a 5 m grid.** Per the PGDA
+  product description, **approximately 90% of pixels in the 5 m/pixel grid
+  require interpolation** between actual LOLA laser shots, because LOLA's
+  cross-track spacing is coarser than 5 m almost everywhere except very close
+  to the pole. Only a minority of pixels are directly measured returns —
+  the rest are filled in by the co-adjustment/gridding process. Small,
+  isolated features narrower than the local LOLA track spacing may be
+  smoothed out or represent interpolation, not necessarily a real feature at
+  that exact location.
+- **Per-pixel uncertainty is quantified and available**, but not currently
+  used by this application:
+  - `*_toterr.tif` — total vertical (Z) uncertainty per pixel, in metres
+  - `*_slperr.tif` — slope uncertainty per pixel, in degrees
+  - `*_ldec.tif` — number of actual LOLA returns per pixel (a direct proxy
+    for how "real" vs. "interpolated" a given pixel is)
+  - 100 numbered statistical "clone" rasters per site, generated to let users
+    propagate elevation uncertainty (including its fractal/spatially-correlated
+    structure) through downstream analysis (e.g., Monte Carlo route-safety
+    analysis) rather than treating each pixel's error as independent
+- **Practical implication for route planning:** the current rover-route
+  safety classification (see `TECHNICAL_OVERVIEW.md`, section 5) uses slope
+  computed from the elevation grid alone, with no uncertainty margin. A
+  documented, worthwhile future improvement is to pull in `*_toterr.tif` /
+  `*_slperr.tif` (or the clone rasters) so a route can be flagged as "unsafe"
+  or "needs review" specifically where the underlying elevation itself is
+  poorly constrained, not only where the interpolated slope is steep.
+- **Interpolated NoData cells get filled twice, independently:** the source
+  GeoTIFF already fills most gaps as part of the LOLA gridding process
+  described above; on top of that, `QGISDEM.py` independently fills any
+  remaining NoData/NaN cells in the exported subset using nearest-valid-elevation.
+  Both fills are visible in the app's DEM Status panel (invalid pixel counts).
+
+## 4. License and Usage Rights
+
+This data originates from NASA (a U.S. Government agency); NASA-produced data
+and PGDA data products are generally distributed for unrestricted public use.
+As with any NASA data product, **cite the source paper (section 2) and NASA
+GSFC/PGDA as the data provider** in any publication, presentation, or
+downstream product (including this project and any student competition
+submissions). This project does not modify the underlying elevation values
+beyond gap-filling and format conversion (see `QGISDEM.py`); it does not
+redistribute the raw NASA GeoTIFF itself, only the small derived
+mission-area subset needed for the web viewer.
+
+## 5. Related / Alternative Datasets
+
+For future work needing finer local detail than pure LOLA altimetry can
+provide (e.g., boulders, small crater rims, or other features narrower than
+LOLA's track spacing), NASA GSFC PGDA also publishes a complementary product
+that enhances the same underlying LOLA data with LROC NAC (Narrow Angle
+Camera) imagery via Shape-from-Shading, covering the 2022 Artemis III
+candidate landing regions (Nobile Rim 2 included) at the same 5 m/pixel grid
+spacing:
+
+- **Product page:** https://pgda.gsfc.nasa.gov/products/104 — "Enhanced
+  Topography Models for Selected Lunar South Pole Regions with
+  Shape-from-Shading"
+- **Data archive (Zenodo):** https://zenodo.org/records/17954508 (DOI
+  10.5281/zenodo.17954508)
+- **Citation:** Bertone, S., McKenna, T. E., Barker, M. K., Mazarico, E.,
+  Beyer, R. A., and Petro, N., "Enhanced Topography Models for Selected
+  Lunar South Pole Regions with Shape-from-Shading," *The Planetary Science
+  Journal* (DOI: 10.3847/PSJ/ae5b70)
+
+This is a separate, independently citable product from the one actually used
+by this project (section 2) — do not cite it as this project's data source,
+but it is worth knowing about since Shape-from-Shading can resolve
+finer-scale slopes and small features that pure laser-altimetry interpolation
+smooths over, at the cost of being a derived/model-dependent product rather
+than direct altimetry.
+
+## 6. How to Get Data for a Different Landing Site
 
 1. Read the README first: https://pgda.gsfc.nasa.gov/data/LOLA_5mpp/README
    — it has the authoritative file-naming convention and citation.
@@ -103,7 +180,7 @@ Gerlache-Kocher Massif (`Site42`), Faustini Rim A (`LM7`), Amundsen Rim
 6. Restart the app (`npm run dev`) — it reads those two files directly; no
    other code changes are required to display a different landing site.
 
-## 4. Coordinate System Notes
+## 7. Coordinate System Notes
 
 The app's local X/Z scene coordinates are simply the DEM's projected
 South-Polar-Stereographic X/Y coordinates (in metres) recentred on the
@@ -120,7 +197,14 @@ longitude − central meridian) rotates true compass directions away from the
 scene's grid axes — the on-screen direction gizmo now corrects for this (see
 `TECHNICAL_OVERVIEW.md`, section on coordinate transforms).
 
-## 5. Verification Note
+**Vertical scale:** the app renders elevation with `VERTICAL_EXAGGERATION = 1`
+in `main.js` — i.e. **no vertical exaggeration**. Horizontal and vertical axes
+use the same real-world scale (metres = metres), so slopes and relief shown
+in the 3D view represent true, physical steepness, not an exaggerated
+"dramatic terrain" rendering. This matters for anyone assessing slope safety
+visually rather than from the numeric slope readout.
+
+## 8. Verification Note
 
 This source (PGDA product #78 / `LOLA_5mpp`, site code `DM2`) was confirmed
 by matching the actual downloaded file name pattern
