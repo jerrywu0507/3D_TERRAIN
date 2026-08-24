@@ -1,100 +1,167 @@
-# 月球南極地形視覺化系統（Lunar South Pole Terrain Visualization）
+# Lunar South Pole Terrain Visualization
 
-使用 [Three.js](https://threejs.org/) 打造的網頁版 3D 月球地形視覺化與月球車任務路線規劃工具，資料來源為 Artemis III 候選登陸區 **Nobile Rim 2** 的高解析度數位高程模型（DEM）。可即時瀏覽地形、查詢任意座標的高程、規劃月球車路線並分析沿途坡度與危險路段。
+A web-based 3D lunar terrain visualization and rover mission route-planning
+tool built with [Three.js](https://threejs.org/), using a high-resolution
+Digital Elevation Model (DEM) of **Nobile Rim 2**, one of NASA's Artemis III
+candidate landing regions. Browse the terrain in real time, query the
+elevation at any coordinate, plan a rover route, and analyze slope and
+hazardous sections along the way.
 
-## 功能特色
+## Features
 
-- **3D 地形渲染**：以真實 DEM 資料建構的可互動地形網格，支援旋轉／縮放／平移
-- **座標查詢**：點擊地形或輸入經緯度，即可讀取該點的月面座標、投影座標與絕對高程
-- **任務路線規劃**：點擊或搜尋依序新增任意數量的路徑點，自動沿地表生成貼地多節點路線，並計算：
-  - 水平距離、地表路徑距離
-  - 累積爬升／下降、淨高程變化
-  - 平均坡度、最大坡度
-  - 路線安全狀態（依坡度分級）
-- **路徑點編輯**：點擊路徑點旗子可選取，選取後可拖曳移動位置、點擊地形在其後插入新點、按 `Delete` 鍵移除該點
-- **路線匯出／儲存**：可將目前路線匯出成 CSV 或 GeoJSON 檔案，或儲存到瀏覽器本機（重新整理頁面後可讀取回來）
-- **路線剖面圖**：沿路線繪製高程剖面圖，依坡度分段變色，標示最大坡度位置、最大爬升／下降區段、不安全路段與高程突變點
-- **圖層疊加**：坡度圖層（5 級色帶）與等高色帶圖層，可個別開關
-- **月球全貌小面板**：可拖曳／縮放的月球全貌小視窗，貼圖來自 NASA CGI Moon Kit，可手動拖曳旋轉查看任意角度
-- **雙語介面**：中文／英文即時切換
-- **可自由配置的介面**：所有面板皆可拖曳、調整大小、顯示／隱藏，並支援整體介面縮放
+- **Loading screen**: a full-screen overlay shown while terrain data loads,
+  with a live download-progress percentage
+- **3D terrain rendering**: an interactive terrain mesh built from real DEM
+  data, with rotate/zoom/pan controls; no vertical exaggeration (relief is
+  shown at true horizontal-to-vertical scale)
+- **DEM data cleaning**: automatically detects and repairs invalid pixels,
+  removes single-pixel noise through multi-pass neighbor-median comparison,
+  and finds/fills isolated cone-shaped terrain artifacts; results (NoData
+  count, repaired-pixel count, spike-correction count, etc.) are shown in
+  the DEM Status panel
+- **Direction gizmo**: a 3D compass in the bottom-right corner labeled with
+  East/South/West/North and Zenith; automatically corrects for "meridian
+  convergence" based on the terrain's center longitude, so it points to true
+  geographic directions rather than the scene's raw grid axes
+- **Coordinate query**: click the terrain or enter a latitude/longitude to
+  read that point's lunar surface coordinates, projected coordinates, and
+  absolute elevation
+- **Mission route planning**: click or search to add any number of waypoints
+  in sequence; the app automatically generates a terrain-following
+  multi-segment route and computes:
+  - Horizontal distance and surface-path distance
+  - Cumulative ascent/descent and net elevation change
+  - Average slope and maximum slope
+  - Route safety status (based on slope classification)
+- **Waypoint editing**: click a waypoint flag to select it, then drag to
+  move it, click the terrain to insert a new point after it, or press
+  `Delete` to remove it
+- **Route export/save**: export the current route as CSV or GeoJSON, or save
+  it locally in the browser (reloadable after a page refresh)
+- **Route elevation profile**: an elevation-vs-distance chart along the
+  route; hover anywhere on the chart to see the distance/elevation/slope/
+  lat-lon at that point. A "Slope Safety Coloring" toggle switches the 3D
+  route between a single flat color and per-segment coloring (Safe /
+  Passable / Warning / Unsafe); the chart also marks the maximum-slope
+  location, the steepest ascent/descent sections, and sudden elevation
+  changes
+- **Overlay layers**: a slope layer (5-tier color scale) and an elevation-band
+  layer, toggleable independently
+- **Moon overview inset**: a draggable/resizable globe inset showing where
+  the mission area sits on the full Moon, textured from the NASA CGI Moon
+  Kit; drag to rotate freely, renders on demand rather than every frame
+- **Bilingual interface**: instant Chinese/English toggle
+- **Freely configurable UI**: every panel can be dragged, resized, shown/
+  hidden, with overall interface scaling supported
 
-## 資料來源
+## Data Source
 
-| 項目 | 說明 |
+| Item | Description |
 |---|---|
-| 地形 DEM | Nobile Rim 2 任務區，10km × 10km，5m/pixel，2000×2000 網格（南極立體投影） |
-| 高程範圍 | 約 303m ～ 1647m |
-| 月球全貌貼圖 | [NASA CGI Moon Kit](https://svs.gsfc.nasa.gov/4720)（2025 年 12 月版彩色貼圖 + 高程貼圖），credit: NASA's Scientific Visualization Studio |
+| Terrain DEM | Nobile Rim 2 (Artemis III candidate landing region, site code `DM2`), a ~10 km × 10 km mission-area subset, 5 m/pixel, 2000×2000 grid, South Polar Stereographic projection (MOON_ME/DE421 reference frame) |
+| Elevation range | approx. 303 m – 1647 m |
+| DEM origin | NASA GSFC PGDA — Barker, M. K., et al., 2021, *Planetary and Space Science*, Vol. 203, 105119 (DOI: [10.1016/j.pss.2020.105119](https://doi.org/10.1016/j.pss.2020.105119)), pure LOLA laser-altimetry data |
+| Moon overview texture | [NASA CGI Moon Kit](https://svs.gsfc.nasa.gov/4720) (December 2025 color + elevation maps), credit: NASA's Scientific Visualization Studio |
 
-原始 GeoTIFF DEM 透過 `QGISDEM.py` 轉換為專案使用的 `public/heightmap_float32.bin`（float32 高程資料）與 `public/heightmap_metadata.json`（座標轉換、範圍等中繼資料）。
+The source GeoTIFF DEM is converted by `QGISDEM.py` into the files this
+project actually loads: `public/heightmap_float32.bin` (float32 elevation
+grid) and `public/heightmap_metadata.json` (coordinate transform, extent,
+and other metadata).
 
-## 技術棧
+**For the full data-source explanation, how to obtain other candidate
+landing regions, data-quality/limitations notes, and licensing, see
+[`DATA_SOURCES.md`](DATA_SOURCES.md).**
 
-- [Three.js](https://threejs.org/)（3D 渲染、OrbitControls）
-- [Vite](https://vitejs.dev/)（開發伺服器與打包）
-- 原生 JavaScript（無額外前端框架）
-- Python（`QGISDEM.py`，DEM 前處理，需 `rasterio`、`numpy`、`scipy`）
+## Technical Documentation
 
-## 開始使用
+| Document | Contents |
+|---|---|
+| [`DATA_SOURCES.md`](DATA_SOURCES.md) | The verified source and citation for the terrain data, how to obtain other candidate landing regions, data-quality/limitations notes, licensing |
+| [`TECHNICAL_OVERVIEW.md`](TECHNICAL_OVERVIEW.md) | Code and logic overview: project architecture, data pipeline, DEM cleaning algorithm, coordinate-transform formulas, route-safety-analysis logic, validation methodology |
+
+## Tech Stack
+
+- [Three.js](https://threejs.org/) (3D rendering, OrbitControls, ViewHelper)
+- [Vite](https://vitejs.dev/) (dev server and bundling)
+- Vanilla JavaScript ES Modules (no additional frontend framework); a pure
+  client-side static site with no backend server
+- Python (`QGISDEM.py`, offline DEM pre-processing; requires `rasterio`,
+  `numpy`, `scipy`)
+
+## Getting Started
 
 ```bash
 npm install
 npm run dev
 ```
 
-啟動後，終端機會顯示本地網址（預設 `http://localhost:5173`），用瀏覽器打開即可。
+Once started, the terminal prints a local URL (default
+`http://localhost:5173`) — open it in a browser.
 
-其他指令：
+Other commands:
 
 ```bash
-npm run build     # 打包成正式版（輸出到 dist/）
-npm run preview   # 預覽打包後的正式版
+npm run build     # Build for production (output to dist/)
+npm run preview   # Preview the production build
 ```
 
-### 使用自己的 DEM 資料
+### Using Your Own DEM Data (e.g. a different candidate landing region)
 
-1. 準備好 GeoTIFF 格式的 DEM 檔案
-2. 修改 `QGISDEM.py` 裡的 `INPUT_DEM` 路徑
-3. 執行 `python QGISDEM.py`，會自動輸出 `heightmap_float32.bin` 與 `heightmap_metadata.json` 到 `public/`
-4. 重新整理網頁即可載入新地形
+1. Prepare a GeoTIFF DEM file (to switch to a different lunar south pole
+   candidate landing region, [`DATA_SOURCES.md`](DATA_SOURCES.md) has the
+   full list of available sites and download steps)
+2. Edit the `INPUT_DEM` path in `QGISDEM.py`
+3. Run `python QGISDEM.py` — it writes `heightmap_float32.bin` and
+   `heightmap_metadata.json` into `public/`
+4. Reload the page to load the new terrain
 
-## 操作方式
+## Controls
 
-| 操作 | 說明 |
+| Action | Description |
 |---|---|
-| 左鍵拖曳 | 旋轉視角 |
-| 滾輪 | 縮放 |
-| 右鍵拖曳 | 平移 |
-| 點擊地形 | 第一次點擊設定起點，之後每次點擊依序新增路徑點；按 `R` 清除路線重新開始 |
-| 點擊路徑點旗子 | 選取／取消選取該路徑點 |
-| 拖曳路徑點旗子 | 移動該路徑點的位置 |
-| 選取路徑點後點擊地形 | 在該路徑點之後插入新路徑點 |
-| 選取路徑點後按 `Delete` | 移除該路徑點 |
+| Left-click drag | Rotate the view |
+| Mouse wheel | Zoom |
+| Right-click drag | Pan |
+| Click the terrain | First click sets the start point; each click after that adds a waypoint in sequence; press `R` to clear the route and start over |
+| Click a waypoint flag | Select/deselect that waypoint |
+| Drag a waypoint flag | Move that waypoint's position |
+| Click the terrain after selecting a waypoint | Insert a new waypoint after it |
+| Press `Delete` after selecting a waypoint | Remove that waypoint |
 
-### 鍵盤快捷鍵
+### Keyboard Shortcuts
 
-| 按鍵 | 功能 |
+| Key | Function |
 |---|---|
-| `G` | 顯示／隱藏網格 |
-| `A` | 顯示／隱藏座標軸 |
-| `S` | 顯示／隱藏坡度圖層 |
-| `E` | 顯示／隱藏等高色帶圖層 |
-| `R` | 清除目前路線 |
-| `Delete` / `Backspace` | 移除已選取的路徑點 |
-| `Esc` | 取消選取路徑點 |
-| `U` | 顯示／隱藏整體介面 |
-| `[` / `]` | 縮小／放大介面 |
+| `G` | Show/hide the grid |
+| `A` | Show/hide the coordinate axes |
+| `S` | Show/hide the slope layer |
+| `E` | Show/hide the elevation-band layer |
+| `R` | Clear the current route |
+| `Delete` / `Backspace` | Remove the selected waypoint |
+| `Esc` | Deselect the selected waypoint |
+| `U` | Show/hide the whole interface |
+| `[` / `]` | Shrink/enlarge the interface |
 
-## 專案結構
+## Project Structure
 
 ```
-├── index.html              # 進入點
-├── src/main.js             # 主程式（場景、UI、路線分析等全部邏輯）
+├── index.html                 # Entry point
+├── src/
+│   ├── main.js                 # Main program: scene setup, DEM loading/
+│   │                            # cleaning, coordinate transforms, terrain
+│   │                            # picking, route planning/analysis, animation loop
+│   ├── loading-overlay.js      # Full-screen loading overlay (with download %)
+│   ├── view-gizmo.js           # 3D direction gizmo (with meridian-convergence correction)
+│   ├── ui-core.js              # Shared panel UI (drag/resize, bilingual text, interface scaling)
+│   ├── moon-overview.js        # Moon overview inset
+│   ├── markers.js              # Marker (flag/dot) geometry construction utilities
+│   └── utils.js                # Shared formatting helper functions
 ├── public/
-│   ├── heightmap_float32.bin     # 地形高程資料
-│   ├── heightmap_metadata.json   # 地形中繼資料
-│   └── moon/                     # 月球全貌貼圖
-├── QGISDEM.py               # GeoTIFF DEM → 專案用二進位格式的轉換腳本
+│   ├── heightmap_float32.bin   # Terrain elevation data
+│   ├── heightmap_metadata.json # Terrain metadata
+│   └── moon/                   # Moon overview textures
+├── QGISDEM.py                  # GeoTIFF DEM -> project binary format conversion script
+├── DATA_SOURCES.md             # Data source and acquisition guide
+├── TECHNICAL_OVERVIEW.md       # Code and logic technical overview
 └── package.json
 ```
