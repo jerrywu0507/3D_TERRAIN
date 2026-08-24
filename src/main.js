@@ -2956,25 +2956,18 @@ function updateStatusPanel() {
     </strong><br>
 
     <span style="color:#9db3c8;font-size:12px;">
-      資料來源 (Data Source)：NASA GSFC PGDA — Bertone et al.,
-      "Enhanced Topography Models for Selected Lunar South Pole
-      Regions with Shape-from-Shading,"
-      <em>The Planetary Science Journal</em>
+      資料來源 (Data Source)：NASA GSFC PGDA, site DM2 — Barker, M. K.,
+      et al., 2021, "Improved LOLA Elevation Maps for South Pole
+      Landing Sites: Error Estimates and Their Impact on
+      Illumination Conditions,"
+      <em>Planetary and Space Science</em>, Vol. 203, 105119
       (DOI:
       <a
-        href="https://doi.org/10.3847/PSJ/ae5b70"
+        href="https://doi.org/10.1016/j.pss.2020.105119"
         target="_blank"
         rel="noopener noreferrer"
         style="color:#7ec8ff;"
-      >10.3847/PSJ/ae5b70</a>)；
-      基礎測高資料 (Baseline Altimetry)：LOLA — Barker et al. 2023
-      (DOI:
-      <a
-        href="https://doi.org/10.3847/PSJ/acf3e1"
-        target="_blank"
-        rel="noopener noreferrer"
-        style="color:#7ec8ff;"
-      >10.3847/PSJ/acf3e1</a>)
+      >10.1016/j.pss.2020.105119</a>)
     </span><br>
 
     顯示網格 (Display Grid)：
