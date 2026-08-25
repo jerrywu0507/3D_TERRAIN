@@ -5,6 +5,23 @@ coordinate readouts, and rover-route safety analysis shown on screen — for any
 reviewing the code (e.g., for a JPL/NASA collaboration) who needs to understand the
 logic without reading all ~9,900 lines of source.
 
+*Last verified: 2026-08-25 — all file/line references below were checked
+against the current state of the repository on this date. If the code has
+changed since, re-check line numbers with e.g. `grep -n "function name"
+src/main.js` before citing them elsewhere.*
+
+**Contents**
+
+1. [Project Structure](#1-project-structure)
+2. [Data Pipeline (source GeoTIFF -> browser)](#2-data-pipeline-source-geotiff---browser)
+3. [DEM Cleaning](#3-dem-cleaning-cleandemelevations-mainjs1725)
+4. [Coordinate Transforms](#4-coordinate-transforms)
+5. [Route Planning and Slope-Safety Analysis](#5-route-planning-and-slope-safety-analysis)
+6. [On-Screen Data Attribution](#6-on-screen-data-attribution)
+7. [Validation Methodology](#7-validation-methodology)
+8. [Tech Stack and Deployment](#8-tech-stack-and-deployment)
+9. [Error Handling and Failure Modes](#9-error-handling-and-failure-modes)
+
 ## 1. Project Structure
 
 ```
@@ -179,6 +196,21 @@ bearings). `main.js` calls this once the terrain's centre longitude is known
   classification (a per-segment `THREE.TubeGeometry`/`MeshBasicMaterial`),
   toggled from the Cross Section panel; by default it renders as a single
   flat colour.
+- **Route persistence** (`saveRouteToLocalStorage()` /
+  `loadRouteFromLocalStorage()`, `main.js:7632`/`7678`): "Save Route" writes
+  only the waypoints' latitude/longitude (not elevation, distance, or slope —
+  those are recomputed on load by re-sampling the currently-loaded terrain)
+  as a single JSON payload under one fixed key (`SAVED_ROUTE_STORAGE_KEY`) in
+  the browser's `localStorage`. This means: (a) the save is entirely
+  client-side — nothing is sent to a server; (b) there is only **one** save
+  slot, so saving again overwrites the previous save; (c) the saved route is
+  scoped to that specific browser (and that specific origin/URL) — it will
+  not appear on a different device, browser, or hostname; (d) if the
+  terrain currently loaded doesn't cover the saved coordinates, loading will
+  fail gracefully rather than showing garbage. Exporting to CSV/GeoJSON
+  (`exportRouteAsCsv()` / `exportRouteAsGeoJson()`, `main.js:7498`/`7550`)
+  is unrelated to this storage and produces a downloadable file with the
+  full computed route data instead.
 
 ## 6. On-Screen Data Attribution
 
@@ -238,3 +270,32 @@ adopted, not just reasoned about in the abstract:
   static file host (e.g. GitHub Pages, S3, a plain web server) as long as
   `public/heightmap_float32.bin` and `public/heightmap_metadata.json` are
   served alongside it.
+
+## 9. Error Handling and Failure Modes
+
+- **Terrain data fails to load** (`loadTerrainData()`, `main.js:1384`
+  catch block) — e.g. the network request fails, or `heightmap_float32.bin`
+  is corrupt/mismatched with its metadata: the error is logged to the
+  browser console, the DEM Status panel shows the raw error message, and
+  the full-screen loading overlay is switched into an explicit error state
+  (`showLoadingOverlayError()`, red "Failed to Load Map" text) rather than
+  being hidden — the user is left on a clear failure screen instead of a
+  blank or broken 3D scene.
+- **Route creation with insufficient elevation data** — if the clicked/added
+  waypoints don't yield at least 2 valid terrain samples (e.g. points fall
+  outside the loaded DEM's coverage, or land entirely on invalid/NoData
+  cells), the Mission panel shows "Traverse Creation Failed / Insufficient
+  Valid Elevation Data Along the Traverse" instead of attempting to render a
+  route with missing data.
+- **`localStorage` unavailable or full** — `saveRouteToLocalStorage()`
+  (section 5) wraps the write in a `try`/`catch` and shows an explicit
+  "Save Failed — Browser Storage May Be Full" message rather than failing
+  silently (this also covers private-browsing modes where `localStorage`
+  writes can throw).
+- **General pattern:** the app favors showing a specific, human-readable
+  bilingual error/status message in the relevant panel over throwing an
+  unhandled exception or leaving stale/blank UI state — but this is applied
+  per-feature as issues were found, not enforced by a single global
+  error-boundary mechanism (there is no top-level `try`/`catch` around the
+  whole app; an error outside one of the handled paths above could still
+  surface as an uncaught console error with no on-screen indication).
