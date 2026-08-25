@@ -5,6 +5,22 @@ and how to obtain elevation data for a **different** lunar south pole landing si
 so students can choose a different descent/landing point and reproduce the same
 pipeline.
 
+*Last verified: 2026-08-25 — all URLs, citations, and site-code mappings below
+were checked against the live NASA GSFC PGDA pages on this date. If a link is
+broken or a citation looks outdated, re-verify against the README linked in
+section 2 before relying on it.*
+
+**Contents**
+
+1. [Current Dataset](#1-current-dataset)
+2. [Source Dataset (NASA GSFC PGDA)](#2-source-dataset-nasa-gsfc-pgda)
+3. [Data Quality and Limitations](#3-data-quality-and-limitations)
+4. [License and Usage Rights](#4-license-and-usage-rights)
+5. [Related / Alternative Datasets](#5-related--alternative-datasets)
+6. [How to Get Data for a Different Landing Site](#6-how-to-get-data-for-a-different-landing-site)
+7. [Coordinate System Notes](#7-coordinate-system-notes)
+8. [Verification Note](#8-verification-note)
+
 ## 1. Current Dataset
 
 | Property | Value |
@@ -179,6 +195,16 @@ than direct altimetry.
      projected bounds, transform, and the CRS WKT)
 6. Restart the app (`npm run dev`) — it reads those two files directly; no
    other code changes are required to display a different landing site.
+
+**Expect a large download.** File sizes are not listed on the PGDA pages, but
+they can be estimated: an uncompressed 5 m/pixel float32 GeoTIFF needs
+`(width_km × 1000 / 5) × (height_km × 1000 / 5) × 4` bytes. For reference,
+this project's own cropped ~10 km × 10 km Nobile Rim 2 subset
+(`heightmap_float32.bin`) is 2000×2000 pixels ≈ **16 MB** uncompressed. A
+full site's `*_surf.tif` covers a larger extent than this 10 km subset (see
+step 4), so expect a noticeably bigger download — check the reported file
+size before downloading if you are on a limited connection, and budget disk
+space accordingly if fetching several sites for comparison.
 
 ## 7. Coordinate System Notes
 
