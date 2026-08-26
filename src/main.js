@@ -9,7 +9,9 @@ import {
 
 import {
   createViewGizmo,
-  setViewGizmoCompassCorrection
+  setViewGizmoGlobalAxisOrientation,
+  computeGlobalAxisOrientationQuaternion,
+  createSceneAxisHelper
 } from "./view-gizmo.js";
 
 import {
@@ -244,6 +246,56 @@ const {
   renderer
 );
 
+// ViewHelper 是直接畫在 canvas 右下角的 WebGL 視口，預設緊貼畫面
+// 邊角（沒有留白）；這裡讓它跟其他面板一樣留 14px 邊界，說明文字
+// 標籤再對齊同一個寬度、置中排在正上方，讓使用者知道上面的
+// +X/+Y/+Z 不是東南西北，而是月球的全域本體固定坐標系。
+const VIEW_GIZMO_MARGIN_PX = 14;
+const VIEW_GIZMO_SIZE_PX = 128;
+
+viewHelper.location = {
+  right: VIEW_GIZMO_MARGIN_PX,
+  bottom: VIEW_GIZMO_MARGIN_PX,
+  top: null,
+  left: null
+};
+
+const viewGizmoCaption =
+  document.createElement("div");
+
+viewGizmoCaption.style.cssText = `
+  position: fixed;
+  right: ${VIEW_GIZMO_MARGIN_PX}px;
+  bottom: ${
+    VIEW_GIZMO_MARGIN_PX +
+    VIEW_GIZMO_SIZE_PX +
+    6
+  }px;
+  width: ${VIEW_GIZMO_SIZE_PX}px;
+  z-index: 20;
+  padding: 3px 4px;
+  color: #cbd5e1;
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  font-family: Arial, sans-serif;
+  font-size: 10px;
+  line-height: 1.35;
+  text-align: center;
+  pointer-events: none;
+`;
+
+// wrapBilingualText() 的自動中英文判斷規則要求括號前緊接著中文，
+// 這裡因為夾了「MOON_ME」這段英文字對不上規則，所以改成手動標記
+// lang-zh／lang-en，才能真的隨語言切換。
+viewGizmoCaption.innerHTML =
+  '<span class="lang-zh">全域坐標系 MOON_ME</span>' +
+  '<span class="lang-en">MOON_ME Global Frame</span>';
+
+document.body.appendChild(
+  viewGizmoCaption
+);
+
 // ======================================================
 // 5. 光源（Lights）
 // ======================================================
@@ -302,7 +354,7 @@ const gridHelper = new THREE.GridHelper(
 
 scene.add(gridHelper);
 
-const axesHelper = new THREE.AxesHelper(2);
+const axesHelper = createSceneAxisHelper(2);
 
 scene.add(axesHelper);
 
@@ -2823,11 +2875,14 @@ function updateSceneHelpers() {
     terrainDepthKm / 10
   );
 
+  // 座標軸線每個方向的長度＝2（建構時的基準長度）× 這個縮放值，
+  // 這裡刻意讓它比地形最大邊長還長，確保軸線在畫面上會明顯
+  // 超出地圖邊界，而不是被地形蓋住看不出來。
   axesHelper.scale.setScalar(
     Math.max(
       largestDimension *
-      0.15,
-      0.2
+      0.3,
+      0.3
     )
   );
 }
@@ -2943,10 +2998,20 @@ function updateStatusPanel() {
     terrainCenterLongitudeDegrees
   );
 
-  setViewGizmoCompassCorrection(
+  setViewGizmoGlobalAxisOrientation(
     viewHelper,
-    terrainCenterLongitudeDegrees -
-      CENTRAL_MERIDIAN_DEGREES
+    terrainCenterLatitudeDegrees,
+    terrainCenterLongitudeDegrees
+  );
+
+  // AxesHelper 是直接加進 scene 的一般物件（不像 ViewHelper 每幀
+  // 會覆寫自己的 quaternion），所以可以直接設定旋轉，不需要額外的
+  // 可旋轉子群組。
+  axesHelper.quaternion.copy(
+    computeGlobalAxisOrientationQuaternion(
+      terrainCenterLatitudeDegrees,
+      terrainCenterLongitudeDegrees
+    )
   );
 
   statusPanel.innerHTML = wrapBilingualText(`

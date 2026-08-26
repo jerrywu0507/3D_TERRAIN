@@ -220,8 +220,13 @@ Because the projection's central meridian is fixed at 0°, the scene's local
 +X/+Z axes only line up with true East/North exactly at longitude 0°. Away
 from the central meridian, the "meridian convergence" angle (≈ region
 longitude − central meridian) rotates true compass directions away from the
-scene's grid axes — the on-screen direction gizmo now corrects for this (see
-`TECHNICAL_OVERVIEW.md`, section on coordinate transforms).
+scene's grid axes. The on-screen direction gizmo and the in-scene axis
+helper (`A` key) no longer show local compass directions at all — they show
+the Moon's global body-fixed reference frame, **MOON_ME** (Z = mean
+rotational pole, X = toward the prime meridian, Y completes a right-handed
+system), rotated to indicate where each global axis actually points from
+the terrain's location. See `TECHNICAL_OVERVIEW.md`, section 4.3, for the
+exact derivation.
 
 **Vertical scale:** the app renders elevation with `VERTICAL_EXAGGERATION = 1`
 in `main.js` — i.e. **no vertical exaggeration**. Horizontal and vertical axes

@@ -3,9 +3,9 @@
 This document explains how the application turns a lunar DEM into the 3D terrain,
 coordinate readouts, and rover-route safety analysis shown on screen — for anyone
 reviewing the code (e.g., for a JPL/NASA collaboration) who needs to understand the
-logic without reading all ~9,900 lines of source.
+logic without reading all ~10,200 lines of source.
 
-*Last verified: 2026-08-25 — all file/line references below were checked
+*Last verified: 2026-08-26 — all file/line references below were checked
 against the current state of the repository on this date. If the code has
 changed since, re-check line numbers with e.g. `grep -n "function name"
 src/main.js` before citing them elsewhere.*
@@ -30,7 +30,8 @@ src/
                        DEM loading and cleaning, coordinate transforms, terrain
                        picking, route planning/analysis, animation loop
   loading-overlay.js   Full-screen "Loading Map" overlay with live download %
-  view-gizmo.js        3D direction indicator (compass gizmo), see section 4
+  view-gizmo.js        3D orientation gizmo + in-scene axis helper, both
+                       showing the global MOON_ME frame, see section 4
   ui-core.js           Shared panel UI (draggable/resizable panels, bilingual
                        text helpers, language toggle, interface scaling)
   moon-overview.js     Small globe inset showing the mission area's location
@@ -87,7 +88,7 @@ binary with progress reporting for the loading overlay), then
 `createTerrain()` builds a `THREE.PlaneGeometry`, sets each vertex's height
 from the DEM, and rotates it so elevation maps to world **Y**.
 
-## 3. DEM Cleaning (`cleanDemElevations`, `main.js:1725`)
+## 3. DEM Cleaning (`cleanDemElevations`, `main.js:1777`)
 
 Real DEM rasters, especially near the lunar south pole (permanently-shadowed,
 photogrammetrically difficult terrain), contain isolated bad pixels. Cleaning
@@ -105,7 +106,7 @@ DEM Status panel:
    noisy pixels in the same cluster, which keeps the local median artificially
    high on the first pass.
 3. **Prominent isolated-peak fill** (`findProminentPeaks` /
-   `fillPeakFootprint`, `main.js:1958`/`2065`) — some artifacts are smooth,
+   `fillPeakFootprint`, `main.js:2010`/`2117`) — some artifacts are smooth,
    radially-symmetric "cones" a few pixels wide that step (2) cannot catch,
    because neighbours *inside* the cone are mutually consistent with each
    other. This stage finds any pixel that is a strict local maximum within an
@@ -148,37 +149,103 @@ Elevation maps directly to world Y (with `VERTICAL_EXAGGERATION`, currently
 
 Standard polar stereographic forward/inverse formulas
 (`forwardSouthPolarStereographic` / `inverseSouthPolarStereographic`,
-`main.js:4394`/`4439`), parameterised by the adopted lunar sphere radius
+`main.js:4459`/`4504`), parameterised by the adopted lunar sphere radius
 (1737.4 km) and the projection's central meridian (`CENTRAL_MERIDIAN_DEGREES`
 = 0°). These match the Moon (2015) South Polar Stereographic definition used
 by the source dataset.
 
-### 4.3 Meridian convergence (direction-gizmo correction)
+### 4.3 Local scene axes vs. the global MOON_ME frame
 
-The scene's local +X/+Z axes only line up with true East/South at longitude
-0° (the central meridian). Away from it, true compass directions are rotated
-relative to the grid by the **convergence angle** = region longitude −
-central meridian — a standard property of polar stereographic projections. For
-Nobile Rim 2 (≈58.24°E) this is a ≈58° offset, verified numerically by
-projecting a point one step due-geographic-north/east and comparing it to the
-scene's raw +X/+Z axes.
+The scene's local X/Y/Z (East/Up/South) are **not** the same axes as the
+Moon's global body-fixed reference frame, **MOON_ME** (Mean Earth/Polar
+Axis — the frame this dataset's coordinates are ultimately defined in; see
+`DATA_SOURCES.md`). MOON_ME is defined the same way Earth's ECEF frame is:
 
-`view-gizmo.js`'s `setViewGizmoCompassCorrection(viewHelper,
-convergenceAngleDegrees)` (`view-gizmo.js:209`) applies this correction. The
-underlying `ViewHelper` (three.js addon) overwrites its own world rotation
-from the camera every frame, so the correction cannot be applied to the
-gizmo object itself — instead, its axis-arm and label children are regrouped
-into a rotatable sub-group once, and that sub-group's Y rotation is set to
-`-convergenceAngle` (sign verified numerically against the measured true
-bearings). `main.js` calls this once the terrain's centre longitude is known
-(inside `updateStatusPanel()`).
+- **+Z** = the Moon's mean rotational pole (mean north pole direction)
+- **+X** = toward the mean-Earth direction / prime meridian (0° longitude),
+  in the equatorial plane
+- **+Y** = completes a right-handed system (`Y = Z × X`)
+
+Both the on-screen direction gizmo and the in-scene axis helper (section
+below) display these **global MOON_ME directions**, not local compass
+directions — an earlier version of this project labeled the gizmo E/S/W/N
++ Zenith (local compass directions, valid only exactly at the central
+meridian, requiring a "meridian convergence" correction elsewhere); it was
+replaced with the global-frame display below at the user's request.
+
+At the terrain's centre (≈84.05°S, 58.24°E), the relationship between the
+scene's local East/North/Up and the global MOON_ME X/Y/Z is computed with
+the standard topocentric-frame formula (same construction as Earth's
+ECEF<->ENU transform), parameterised by latitude `φ` and longitude `λ`:
+
+```
+East  = (-sin(λ),          cos(λ),          0)
+North = (-sin(φ)*cos(λ),  -sin(φ)*sin(λ),   cos(φ))
+Up    = ( cos(φ)*cos(λ),   cos(φ)*sin(λ),   sin(φ))
+```
+
+(all expressed as components in the global MOON_ME frame; South = -North is
+the scene's local Z axis). At this latitude, local Up is only ≈5.95°
+(co-latitude) from the global -Z (south pole) direction, while global +Z
+(the actual rotational pole) points almost straight down through the ground
+from here (≈174° from local Up) — because the terrain sits only ~6° of
+latitude from the pole itself. This was cross-checked two ways: against the
+polar-stereographic projection's known "grid convergence = longitude −
+central meridian" property (an earlier, narrower version of this correction
+that handled only compass bearing), and via an independent end-to-end test
+using the project's actual three.js build (see section 7) — both agree.
+
+`view-gizmo.js`'s `computeGlobalAxisOrientationQuaternion(latitudeDegrees,
+longitudeDegrees)` (`view-gizmo.js:346`) builds the rotation matrix whose
+columns are the global +X/+Y/+Z axes expressed in the scene's local
+East/Up/South basis (via `THREE.Matrix4.makeBasis`), and returns it as a
+quaternion. Two call sites apply it:
+
+- `setViewGizmoGlobalAxisOrientation(viewHelper, latitudeDegrees,
+  longitudeDegrees)` (`view-gizmo.js:425`) — for the corner gizmo. The
+  underlying `ViewHelper` (three.js addon) overwrites its own world rotation
+  from the camera every frame, so the rotation can't be applied to the
+  gizmo object itself; instead its axis-arm and label children are
+  regrouped into a rotatable sub-group once, and that sub-group's
+  quaternion is set directly.
+- `axesHelper.quaternion.copy(computeGlobalAxisOrientationQuaternion(...))`
+  (`main.js:3010`) — for the in-scene axis helper. This object is a plain
+  `THREE.Group` added directly to `scene` (not a `ViewHelper`), so its
+  quaternion can just be set directly with no extra workaround.
+
+`main.js` calls both once the terrain's centre latitude/longitude are known
+(inside `updateStatusPanel()`, `main.js:3001`/`3010`).
+
+### 4.4 In-scene axis helper and gizmo caption
+
+`view-gizmo.js`'s `createSceneAxisHelper(size)` (`view-gizmo.js:117`)
+replaces the built-in `THREE.AxesHelper` (which only draws +X/+Y/+Z with no
+labels) with a custom `THREE.Group`: a bright line + a dimmed line per axis
+(covering both the positive and negative direction), plus six labelled
+sprites (+X/-X/+Y/-Y/+Z/-Z, red/green/blue) at the same style as the corner
+gizmo. `main.js` toggles it with the `A` key (unchanged) and sizes it so
+each arm extends to `0.6 x` the terrain's largest horizontal dimension —
+deliberately longer than the terrain extent itself, so the axes are
+visually distinguishable from the ground rather than being hidden inside
+or barely reaching the terrain's edge.
+
+Because both the corner gizmo and the in-scene axis helper now show the
+*global* frame rather than local compass directions, a small fixed caption
+("全域坐標系 MOON_ME (Global Frame)" / "MOON_ME Global Frame") is anchored
+directly above the corner gizmo (`main.js:263`) so it isn't mistaken for a
+compass. It's set via `element.innerHTML` with manually-written
+`lang-zh`/`lang-en` spans rather than `wrapBilingualText()`'s automatic
+Chinese/English detection, because that regex requires the parenthesised
+English text to immediately follow the Chinese run with no intervening
+Latin text — the literal identifier "MOON_ME" in the middle of the caption
+breaks that pattern.
 
 ## 5. Route Planning and Slope-Safety Analysis
 
 - Users click the terrain to add waypoints (`waypoints` array); the route is
   sampled at `ROUTE_SAMPLE_INTERVAL_METERS` (5 m) intervals with DEM
   bilinear interpolation for elevation.
-- `analyzeRoute()` (`main.js:5179`) computes, per sample, the **segment**
+- `analyzeRoute()` (`main.js:5244`) computes, per sample, the **segment**
   slope — `atan2(elevationDifference, thatSegment'sOwnHorizontalDistance)` —
   along with cumulative ascent/descent, horizontal and surface-path distance,
   and the location of maximum slope/ascent/descent/sudden elevation change.
@@ -186,7 +253,7 @@ bearings). `main.js` calls this once the terrain's centre longitude is known
   from the route start instead of each segment's own distance, which made
   slope readings shrink toward 0° as the route got longer; this has been
   fixed and re-verified.)
-- `classifySlope()` (`main.js:4580`) buckets slope into Safe (≤10°) /
+- `classifySlope()` (`main.js:4645`) buckets slope into Safe (≤10°) /
   Warning (>10° and ≤15°) / Unsafe (>15°) — a **terrain-slope-only**
   preliminary classification. It does not yet account for rocks, small
   craters, cross-slope, rover geometry/centre of gravity, soil conditions,
@@ -197,7 +264,7 @@ bearings). `main.js` calls this once the terrain's centre longitude is known
   toggled from the Cross Section panel; by default it renders as a single
   flat colour.
 - **Route persistence** (`saveRouteToLocalStorage()` /
-  `loadRouteFromLocalStorage()`, `main.js:7632`/`7678`): "Save Route" writes
+  `loadRouteFromLocalStorage()`, `main.js:7697`/`7743`): "Save Route" writes
   only the waypoints' latitude/longitude (not elevation, distance, or slope —
   those are recomputed on load by re-sampling the currently-loaded terrain)
   as a single JSON payload under one fixed key (`SAVED_ROUTE_STORAGE_KEY`) in
@@ -208,7 +275,7 @@ bearings). `main.js` calls this once the terrain's centre longitude is known
   not appear on a different device, browser, or hostname; (d) if the
   terrain currently loaded doesn't cover the saved coordinates, loading will
   fail gracefully rather than showing garbage. Exporting to CSV/GeoJSON
-  (`exportRouteAsCsv()` / `exportRouteAsGeoJson()`, `main.js:7498`/`7550`)
+  (`exportRouteAsCsv()` / `exportRouteAsGeoJson()`, `main.js:7563`/`7615`)
   is unrelated to this storage and produces a downloadable file with the
   full computed route data instead.
 
@@ -234,14 +301,19 @@ adopted, not just reasoned about in the abstract:
   for the actual dataset, how many pixels each candidate threshold flagged
   and whether known-legitimate terrain (e.g. broad crater rims) was ever
   caught by mistake.
-- **Meridian convergence correction (section 4.3):** the true geographic
-  north/east bearings at the terrain's centre point were computed directly
-  from the app's own coordinate-transform formulas (stepping one small
-  distance due north and due east in lat/lon, then projecting that back into
-  local scene coordinates), then compared numerically against the scene's
-  raw +X/+Z axes to derive and verify the convergence angle and the sign of
-  the correction rotation — rather than assuming the correction direction
-  from first principles alone.
+- **Global MOON_ME axis orientation (section 4.3):** the topocentric
+  East/North/Up-in-global-frame formula was first validated the same way as
+  the meridian-convergence approach it replaced — stepping one small
+  distance due north/east in lat/lon and comparing the result numerically
+  against the scene's raw local axes — confirming both approaches agree.
+  The full 3×3 rotation (not just a single compass-bearing angle) was then
+  verified end-to-end using the project's own three.js build in a
+  standalone Node.js script: constructing the same
+  `computeGlobalAxisOrientationQuaternion()` call used in the app, applying
+  it to unit vectors representing each gizmo arm, and confirming the
+  rotated directions exactly matched the hand-derived expected values
+  (including the ≈174° angle between the rotated +Z arm and local Up,
+  matching the independently-computed co-latitude).
 - **Route slope fix (section 5):** the corrected segment-slope formula was
   re-derived and cross-checked against sample route data before being
   shipped.
@@ -273,7 +345,7 @@ adopted, not just reasoned about in the abstract:
 
 ## 9. Error Handling and Failure Modes
 
-- **Terrain data fails to load** (`loadTerrainData()`, `main.js:1384`
+- **Terrain data fails to load** (`loadTerrainData()`, `main.js:1436`
   catch block) — e.g. the network request fails, or `heightmap_float32.bin`
   is corrupt/mismatched with its metadata: the error is logged to the
   browser console, the DEM Status panel shows the raw error message, and
