@@ -2876,14 +2876,9 @@ function updateSceneHelpers() {
   );
 
   // 座標軸線每個方向的長度＝2（建構時的基準長度）× 這個縮放值，
-  // 這裡刻意讓它比地形最大邊長還長，確保軸線在畫面上會明顯
-  // 超出地圖邊界，而不是被地形蓋住看不出來。
+  // 固定成每個方向 6 公里，不再跟著地形大小按比例縮放。
   axesHelper.scale.setScalar(
-    Math.max(
-      largestDimension *
-      0.3,
-      0.3
-    )
+    3
   );
 }
 
@@ -6168,11 +6163,24 @@ function selectNamedPointMarker() {
   clickMarker.visible =
     true;
 
+  focusCameraOnPoint(
+    point
+  );
+
+  // 點擊命名標記點直接設為起點（原本只會填入搜尋面板的經緯度，
+  // 還要另外去按「設為起點」才生效，如果搜尋面板剛好被關掉，
+  // 使用者會看不到任何回饋、以為選取沒有作用）。
+  setStartPointFromCoordinate(
+    point
+  );
+
+  showCoordinateInformation();
+
   showCoordinateSearchMessage(
-    `已選取標記點 (Selected Marked Point)：` +
+    `已將標記點設為起點 (Start Point Set to Marked Point)：` +
     `${point.latitudeDegrees.toFixed(6)}°, ` +
     `${point.longitudeDegrees.toFixed(6)}°`,
-    "#c77dff"
+    "#42ff78"
   );
 }
 
