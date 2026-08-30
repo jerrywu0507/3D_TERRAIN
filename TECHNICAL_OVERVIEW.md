@@ -196,13 +196,13 @@ that handled only compass bearing), and via an independent end-to-end test
 using the project's actual three.js build (see section 7) — both agree.
 
 `view-gizmo.js`'s `computeGlobalAxisOrientationQuaternion(latitudeDegrees,
-longitudeDegrees)` (`view-gizmo.js:346`) builds the rotation matrix whose
+longitudeDegrees)` (`view-gizmo.js:330`) builds the rotation matrix whose
 columns are the global +X/+Y/+Z axes expressed in the scene's local
 East/Up/South basis (via `THREE.Matrix4.makeBasis`), and returns it as a
 quaternion. Two call sites apply it:
 
 - `setViewGizmoGlobalAxisOrientation(viewHelper, latitudeDegrees,
-  longitudeDegrees)` (`view-gizmo.js:425`) — for the corner gizmo. The
+  longitudeDegrees)` (`view-gizmo.js:409`) — for the corner gizmo. The
   underlying `ViewHelper` (three.js addon) overwrites its own world rotation
   from the camera every frame, so the rotation can't be applied to the
   gizmo object itself; instead its axis-arm and label children are

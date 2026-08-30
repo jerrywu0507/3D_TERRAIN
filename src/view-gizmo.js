@@ -217,7 +217,9 @@ export function createViewGizmo(
   // +Y＝與 X、Z 皆垂直，依右手定則補足（Y = Z × X）
   // 顏色沿用 three.js 慣例：X＝紅、Y＝綠、Z＝藍。
   //
-  // 六個方位球都改用自訂繪製（不用 ViewHelper 內建的 setLabels()），
+  // 只標示正方向的 X/Y/Z（不加 + 號、也不標負方向的 -X/-Y/-Z），
+  // 讓畫面單純一些；負方向沿用 ViewHelper 內建的無字黑點樣式。
+  // 三個正方位球改用自訂繪製（不用 ViewHelper 內建的 setLabels()），
   // 統一放大貼圖／圓點／字型，並依實際地形中心經緯度旋轉整組標籤
   // （見 setViewGizmoGlobalAxisOrientation()），讓箭頭真的指向對應
   // 的全域座標方向，而不是場景本地座標的方向。
@@ -230,38 +232,20 @@ export function createViewGizmo(
     {
       type: "posX",
       color: "#ff4466",
-      text: "+X",
+      text: "X",
       opacity: 1
-    },
-    {
-      type: "negX",
-      color: "#ff4466",
-      text: "-X",
-      opacity: 0.55
     },
     {
       type: "posY",
       color: "#88ff44",
-      text: "+Y",
+      text: "Y",
       opacity: 1
-    },
-    {
-      type: "negY",
-      color: "#88ff44",
-      text: "-Y",
-      opacity: 0.55
     },
     {
       type: "posZ",
       color: "#4488ff",
-      text: "+Z",
+      text: "Z",
       opacity: 1
-    },
-    {
-      type: "negZ",
-      color: "#4488ff",
-      text: "-Z",
-      opacity: 0.55
     }
   ];
 
