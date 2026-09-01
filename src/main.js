@@ -44,6 +44,14 @@ import {
 } from "./dem-cleaning.js";
 
 import {
+  localToProjectedCoordinates,
+  projectedToLocalCoordinates,
+  forwardSouthPolarStereographic,
+  inverseSouthPolarStereographic,
+  normalizeLongitude
+} from "./coordinate-transforms.js";
+
+import {
   initMarkers,
   createSphereMarker,
   createFlagMarker,
@@ -2299,7 +2307,8 @@ function updateStatusPanel() {
   const centerProjected =
     localToProjectedCoordinates(
       0,
-      0
+      0,
+      terrainMetadata
     );
 
   const centerMoonRadiusMeters =
@@ -2612,7 +2621,8 @@ function createPointDataFromGeographicCoordinates(
   const local =
     projectedToLocalCoordinates(
       projected.x,
-      projected.y
+      projected.y,
+      terrainMetadata
     );
 
   const halfWidthKm =
@@ -3253,7 +3263,8 @@ function createPointDataFromWorldPoint(
   const projected =
     localToProjectedCoordinates(
       localXKm,
-      localZKm
+      localZKm,
+      terrainMetadata
     );
 
   const moonRadiusMeters =
@@ -3681,234 +3692,6 @@ function getElevationAtPixel(
     terrainMetadata.width +
     column
   ];
-}
-
-// ======================================================
-// 32. 座標轉換（Coordinate Conversion）
-// ======================================================
-
-function localToProjectedCoordinates(
-  localXKm,
-  localZKm
-) {
-  const west =
-    Number(
-      terrainMetadata.west
-    );
-
-  const east =
-    Number(
-      terrainMetadata.east
-    );
-
-  const south =
-    Number(
-      terrainMetadata.south
-    );
-
-  const north =
-    Number(
-      terrainMetadata.north
-    );
-
-  if (
-    !Number.isFinite(west) ||
-    !Number.isFinite(east) ||
-    !Number.isFinite(south) ||
-    !Number.isFinite(north)
-  ) {
-    throw new Error(
-      "缺少投影範圍資料"
-    );
-  }
-
-  const centerX =
-    (west + east) / 2;
-
-  const centerY =
-    (south + north) / 2;
-
-  return {
-    x:
-      centerX +
-      localXKm *
-      1000,
-
-    y:
-      centerY -
-      localZKm *
-      1000
-  };
-}
-
-function projectedToLocalCoordinates(
-  projectedX,
-  projectedY
-) {
-  const west =
-    Number(
-      terrainMetadata.west
-    );
-
-  const east =
-    Number(
-      terrainMetadata.east
-    );
-
-  const south =
-    Number(
-      terrainMetadata.south
-    );
-
-  const north =
-    Number(
-      terrainMetadata.north
-    );
-
-  const centerX =
-    (west + east) / 2;
-
-  const centerY =
-    (south + north) / 2;
-
-  return {
-    xKm:
-      (
-        projectedX -
-        centerX
-      ) /
-      1000,
-
-    zKm:
-      (
-        centerY -
-        projectedY
-      ) /
-      1000
-  };
-}
-
-function forwardSouthPolarStereographic(
-  longitudeDegrees,
-  latitudeDegrees,
-  moonRadius,
-  centralMeridian = 0
-) {
-  const latitudeRadians =
-    THREE.MathUtils.degToRad(
-      latitudeDegrees
-    );
-
-  const longitudeDifferenceRadians =
-    THREE.MathUtils.degToRad(
-      normalizeLongitude(
-        longitudeDegrees -
-        centralMeridian
-      )
-    );
-
-  const angularDistance =
-    latitudeRadians +
-    Math.PI / 2;
-
-  const rho =
-    2 *
-    moonRadius *
-    Math.tan(
-      angularDistance / 2
-    );
-
-  return {
-    x:
-      rho *
-      Math.sin(
-        longitudeDifferenceRadians
-      ),
-
-    y:
-      rho *
-      Math.cos(
-        longitudeDifferenceRadians
-      )
-  };
-}
-
-function inverseSouthPolarStereographic(
-  projectedX,
-  projectedY,
-  moonRadius,
-  centralMeridian = 0
-) {
-  const rho =
-    Math.hypot(
-      projectedX,
-      projectedY
-    );
-
-  if (
-    rho <
-    Number.EPSILON
-  ) {
-    return {
-      longitudeDegrees:
-        centralMeridian,
-
-      latitudeDegrees:
-        -90
-    };
-  }
-
-  const angularDistance =
-    2 *
-    Math.atan(
-      rho /
-      (
-        2 *
-        moonRadius
-      )
-    );
-
-  const latitude =
-    angularDistance -
-    Math.PI / 2;
-
-  const longitude =
-    THREE.MathUtils.degToRad(
-      centralMeridian
-    ) +
-    Math.atan2(
-      projectedX,
-      projectedY
-    );
-
-  return {
-    longitudeDegrees:
-      THREE.MathUtils.radToDeg(
-        longitude
-      ),
-
-    latitudeDegrees:
-      THREE.MathUtils.radToDeg(
-        latitude
-      )
-  };
-}
-
-function normalizeLongitude(
-  longitude
-) {
-  return (
-    (
-      (
-        longitude +
-        180
-      ) %
-      360 +
-      360
-    ) %
-    360
-  ) -
-  180;
 }
 
 // ======================================================
