@@ -21,6 +21,7 @@ src/main.js` before citing them elsewhere.*
 7. [Validation Methodology](#7-validation-methodology)
 8. [Tech Stack and Deployment](#8-tech-stack-and-deployment)
 9. [Error Handling and Failure Modes](#9-error-handling-and-failure-modes)
+10. [Known Limitations and Future Work](#10-known-limitations-and-future-work)
 
 ## 1. Project Structure
 
@@ -258,7 +259,7 @@ breaks that pattern.
   preliminary classification. It does not yet account for rocks, small
   craters, cross-slope, rover geometry/centre of gravity, soil conditions,
   energy budget, illumination, or Earth-communication visibility (see
-  the Progress Report's "Future Features" section for the full list).
+  section 10 for the full list).
 - The 3D route line can optionally colour each segment by this slope
   classification (a per-segment `THREE.TubeGeometry`/`MeshBasicMaterial`),
   toggled from the Cross Section panel; by default it renders as a single
@@ -371,3 +372,36 @@ adopted, not just reasoned about in the abstract:
   error-boundary mechanism (there is no top-level `try`/`catch` around the
   whole app; an error outside one of the handled paths above could still
   surface as an uncaught console error with no on-screen indication).
+
+## 10. Known Limitations and Future Work
+
+The slope-safety classification (section 5) is a **terrain-slope-only**
+preliminary filter, useful as a first-pass screen but not a complete
+traverse-safety assessment on its own. It does not yet account for:
+
+- **Rocks and small craters** below the DEM's resolution (5 m/pixel) — a
+  hazard smaller than one pixel is invisible to the elevation model
+  entirely, regardless of how the slope threshold is tuned.
+- **Cross-slope** (side-to-side tilt across the direction of travel) — only
+  slope *along* the direction of travel is currently computed; a route that
+  looks safe along-track could still traverse a dangerous side-tilt.
+- **Rover geometry and centre of gravity** — there is no vehicle-specific
+  tip-over, high-centering, or wheel-clearance model; the 10°/15° thresholds
+  are generic, not derived from a specific rover design.
+- **Soil/regolith bearing strength and trafficability** — the DEM carries
+  only elevation, no information about surface material, so loose regolith
+  or bearing-capacity hazards are not distinguished from solid terrain.
+- **Energy budget** — no traverse-time or power-consumption estimate is
+  computed from the route.
+- **Illumination** — no sun-angle/shadow analysis for a specific mission
+  date/time, which matters near the south pole where permanently-shadowed
+  regions and very low sun angles are common.
+- **Earth-communication visibility** — no line-of-sight/Earth-occlusion
+  analysis along the route.
+
+These are documented as known scope boundaries of the current prototype —
+see section 5 for exactly what the slope analysis does compute today. Beyond
+the slope-safety model specifically, section 1.1 also notes the deferred
+`main.js` state-centralisation work, and section 1 notes the lack of an
+automated test suite, both of which are open engineering items rather than
+correctness bugs.
