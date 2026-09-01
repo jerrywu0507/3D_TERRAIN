@@ -28,6 +28,14 @@ export function formatSignedNumber(
   );
 }
 
+export function isValidElevation(value) {
+  return (
+    Number.isFinite(value) &&
+    Math.abs(value) <
+    1_000_000
+  );
+}
+
 export function escapeHtml(value) {
   return String(value)
     .replaceAll(

@@ -5,7 +5,7 @@ coordinate readouts, and rover-route safety analysis shown on screen — for any
 reviewing the code (e.g., for a JPL/NASA collaboration) who needs to understand the
 logic without reading all ~10,200 lines of source.
 
-*Last verified: 2026-08-26 — all file/line references below were checked
+*Last verified: 2026-09-01 — all file/line references below were checked
 against the current state of the repository on this date. If the code has
 changed since, re-check line numbers with e.g. `grep -n "function name"
 src/main.js` before citing them elsewhere.*
@@ -14,7 +14,7 @@ src/main.js` before citing them elsewhere.*
 
 1. [Project Structure](#1-project-structure)
 2. [Data Pipeline (source GeoTIFF -> browser)](#2-data-pipeline-source-geotiff---browser)
-3. [DEM Cleaning](#3-dem-cleaning-cleandemelevations-mainjs1725)
+3. [DEM Cleaning](#3-dem-cleaning-cleandemelevations-dem-cleaningjs452)
 4. [Coordinate Transforms](#4-coordinate-transforms)
 5. [Route Planning and Slope-Safety Analysis](#5-route-planning-and-slope-safety-analysis)
 6. [On-Screen Data Attribution](#6-on-screen-data-attribution)
@@ -28,8 +28,10 @@ src/main.js` before citing them elsewhere.*
 ```
 src/
   main.js             Application entry point: scene/camera/renderer setup,
-                       DEM loading and cleaning, coordinate transforms, terrain
-                       picking, route planning/analysis, animation loop
+                       DEM loading, coordinate transforms, terrain picking,
+                       route planning/analysis, animation loop
+  dem-cleaning.js      DEM elevation cleaning (see section 3) — pure
+                       functions, no scene/UI dependencies
   loading-overlay.js   Full-screen "Loading Map" overlay with live download %
   view-gizmo.js        3D orientation gizmo + in-scene axis helper, both
                        showing the global MOON_ME frame, see section 4
@@ -39,7 +41,8 @@ src/
                        on the full Moon; renders on-demand, not every frame
   markers.js           Reusable 3D marker geometry (sphere markers, flag
                        markers) shared by waypoints and the named point
-  utils.js             Small formatting helpers (formatKm, escapeHtml, ...)
+  utils.js             Small formatting helpers (formatKm, escapeHtml,
+                       isValidElevation, ...)
 QGISDEM.py             Offline pre-processing script: GeoTIFF -> the two
                        files the web app actually loads (see section 2)
 ```
@@ -52,14 +55,25 @@ extraction, since there is no automated test suite.
 
 The extracted modules do **not** import mutable state from `main.js`, since
 ES modules cannot let one file freely reassign another file's exported `let`
-binding. Instead, each module (`ui-core.js`, `markers.js`, `moon-overview.js`,
-`view-gizmo.js`) exposes an `initX({ ... })` function that `main.js` calls
-once at startup, passing in whatever the module needs — either a live
-reference (e.g. the `THREE.Scene`), or a small getter function for state that
-changes over time (e.g. `getCurrentLanguage: () => currentLanguage`). After
-that one-time wiring, each module's other exports are pure functions or
-factories that the module itself is free to call internally without needing
-anything more from `main.js`.
+binding. Two patterns are used, depending on whether the module needs
+anything from `main.js`'s changing state:
+
+- **Stateful modules** (`ui-core.js`, `markers.js`, `moon-overview.js`,
+  `view-gizmo.js`) expose an `initX({ ... })` function that `main.js` calls
+  once at startup, passing in whatever the module needs — either a live
+  reference (e.g. the `THREE.Scene`), or a small getter function for state
+  that changes over time (e.g. `getCurrentLanguage: () => currentLanguage`).
+  After that one-time wiring, each module's other exports are pure functions
+  or factories that the module itself is free to call internally without
+  needing anything more from `main.js`.
+- **Stateless modules** (`dem-cleaning.js`, `utils.js`) need no `initX()` at
+  all — every export is a pure function that takes all the data it needs as
+  parameters (e.g. `cleanDemElevations(source, width, height, noDataValue)`)
+  and returns a plain result instead of reading or writing any module-level
+  variable. `main.js` calls these directly and stores whatever they return
+  into its own local state (e.g. `demCleaningStatistics`, previously mutated
+  as a side effect from inside `cleanDemElevations` itself, is now just the
+  `.statistics` field of that function's return value).
 
 Core application state — `waypoints`, `terrain`/`terrainMetadata`,
 `routeSamples`, `currentLanguage`, and similar — still lives directly in
@@ -89,11 +103,15 @@ binary with progress reporting for the loading overlay), then
 `createTerrain()` builds a `THREE.PlaneGeometry`, sets each vertex's height
 from the DEM, and rotates it so elevation maps to world **Y**.
 
-## 3. DEM Cleaning (`cleanDemElevations`, `main.js:1777`)
+## 3. DEM Cleaning (`cleanDemElevations`, `dem-cleaning.js:452`)
 
 Real DEM rasters, especially near the lunar south pole (permanently-shadowed,
-photogrammetrically difficult terrain), contain isolated bad pixels. Cleaning
-runs in three stages, each tracked in `demCleaningStatistics` and shown in the
+photogrammetrically difficult terrain), contain isolated bad pixels. This
+logic lives in its own module, `dem-cleaning.js` (see section 1.1) — `main.js`
+calls `cleanDemElevations(source, width, height, noDataValue)` from inside
+`createTerrain()` and stores the two fields of its return value into
+`terrainElevations` and `demCleaningStatistics` respectively. Cleaning runs
+in three stages, each tracked in the returned statistics and shown in the
 DEM Status panel:
 
 1. **Invalid-value repair** — NoData/NaN cells are filled from the median of
@@ -107,7 +125,7 @@ DEM Status panel:
    noisy pixels in the same cluster, which keeps the local median artificially
    high on the first pass.
 3. **Prominent isolated-peak fill** (`findProminentPeaks` /
-   `fillPeakFootprint`, `main.js:2010`/`2117`) — some artifacts are smooth,
+   `fillPeakFootprint`, `dem-cleaning.js:207`/`314`) — some artifacts are smooth,
    radially-symmetric "cones" a few pixels wide that step (2) cannot catch,
    because neighbours *inside* the cone are mutually consistent with each
    other. This stage finds any pixel that is a strict local maximum within an
@@ -150,7 +168,7 @@ Elevation maps directly to world Y (with `VERTICAL_EXAGGERATION`, currently
 
 Standard polar stereographic forward/inverse formulas
 (`forwardSouthPolarStereographic` / `inverseSouthPolarStereographic`,
-`main.js:4459`/`4504`), parameterised by the adopted lunar sphere radius
+`main.js:3791`/`3836`), parameterised by the adopted lunar sphere radius
 (1737.4 km) and the projection's central meridian (`CENTRAL_MERIDIAN_DEGREES`
 = 0°). These match the Moon (2015) South Polar Stereographic definition used
 by the source dataset.
@@ -210,12 +228,12 @@ quaternion. Two call sites apply it:
   regrouped into a rotatable sub-group once, and that sub-group's
   quaternion is set directly.
 - `axesHelper.quaternion.copy(computeGlobalAxisOrientationQuaternion(...))`
-  (`main.js:3010`) — for the in-scene axis helper. This object is a plain
+  (`main.js:2342`) — for the in-scene axis helper. This object is a plain
   `THREE.Group` added directly to `scene` (not a `ViewHelper`), so its
   quaternion can just be set directly with no extra workaround.
 
 `main.js` calls both once the terrain's centre latitude/longitude are known
-(inside `updateStatusPanel()`, `main.js:3001`/`3010`).
+(inside `updateStatusPanel()`, `main.js:2333`/`2342`).
 
 ### 4.4 In-scene axis helper and gizmo caption
 
@@ -233,7 +251,7 @@ or barely reaching the terrain's edge.
 Because both the corner gizmo and the in-scene axis helper now show the
 *global* frame rather than local compass directions, a small fixed caption
 ("全域坐標系 MOON_ME (Global Frame)" / "MOON_ME Global Frame") is anchored
-directly above the corner gizmo (`main.js:263`) so it isn't mistaken for a
+directly above the corner gizmo (`main.js:254`) so it isn't mistaken for a
 compass. It's set via `element.innerHTML` with manually-written
 `lang-zh`/`lang-en` spans rather than `wrapBilingualText()`'s automatic
 Chinese/English detection, because that regex requires the parenthesised
@@ -246,7 +264,7 @@ breaks that pattern.
 - Users click the terrain to add waypoints (`waypoints` array); the route is
   sampled at `ROUTE_SAMPLE_INTERVAL_METERS` (5 m) intervals with DEM
   bilinear interpolation for elevation.
-- `analyzeRoute()` (`main.js:5244`) computes, per sample, the **segment**
+- `analyzeRoute()` (`main.js:4576`) computes, per sample, the **segment**
   slope — `atan2(elevationDifference, thatSegment'sOwnHorizontalDistance)` —
   along with cumulative ascent/descent, horizontal and surface-path distance,
   and the location of maximum slope/ascent/descent/sudden elevation change.
@@ -254,7 +272,7 @@ breaks that pattern.
   from the route start instead of each segment's own distance, which made
   slope readings shrink toward 0° as the route got longer; this has been
   fixed and re-verified.)
-- `classifySlope()` (`main.js:4645`) buckets slope into Safe (≤10°) /
+- `classifySlope()` (`main.js:3977`) buckets slope into Safe (≤10°) /
   Warning (>10° and ≤15°) / Unsafe (>15°) — a **terrain-slope-only**
   preliminary classification. It does not yet account for rocks, small
   craters, cross-slope, rover geometry/centre of gravity, soil conditions,
@@ -265,7 +283,7 @@ breaks that pattern.
   toggled from the Cross Section panel; by default it renders as a single
   flat colour.
 - **Route persistence** (`saveRouteToLocalStorage()` /
-  `loadRouteFromLocalStorage()`, `main.js:7697`/`7743`): "Save Route" writes
+  `loadRouteFromLocalStorage()`, `main.js:7042`/`7088`): "Save Route" writes
   only the waypoints' latitude/longitude (not elevation, distance, or slope —
   those are recomputed on load by re-sampling the currently-loaded terrain)
   as a single JSON payload under one fixed key (`SAVED_ROUTE_STORAGE_KEY`) in
@@ -276,7 +294,7 @@ breaks that pattern.
   not appear on a different device, browser, or hostname; (d) if the
   terrain currently loaded doesn't cover the saved coordinates, loading will
   fail gracefully rather than showing garbage. Exporting to CSV/GeoJSON
-  (`exportRouteAsCsv()` / `exportRouteAsGeoJson()`, `main.js:7563`/`7615`)
+  (`exportRouteAsCsv()` / `exportRouteAsGeoJson()`, `main.js:6908`/`6960`)
   is unrelated to this storage and produces a downloadable file with the
   full computed route data instead.
 
@@ -346,7 +364,7 @@ adopted, not just reasoned about in the abstract:
 
 ## 9. Error Handling and Failure Modes
 
-- **Terrain data fails to load** (`loadTerrainData()`, `main.js:1436`
+- **Terrain data fails to load** (`loadTerrainData()`, `main.js:1427`
   catch block) — e.g. the network request fails, or `heightmap_float32.bin`
   is corrupt/mismatched with its metadata: the error is logged to the
   browser console, the DEM Status panel shows the raw error message, and
