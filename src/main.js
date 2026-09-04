@@ -224,7 +224,7 @@ controls.enableRotate = true;
 controls.enableZoom = true;
 controls.enablePan = true;
 
-controls.maxPolarAngle = Math.PI * 0.495;
+controls.maxPolarAngle = Math.PI;
 
 initUiCore({
   defaultInterfaceScale: DEFAULT_INTERFACE_SCALE,
