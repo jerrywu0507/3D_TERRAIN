@@ -139,6 +139,9 @@ let elevationLayerEnabled = false;
 let waypoints = [];
 let waypointMarkers = [];
 let selectedWaypointIndex = null;
+let waypointUndoStack = [];
+
+const MAX_WAYPOINT_UNDO_STEPS = 50;
 
 let activeWaypointPointerId = null;
 let activeWaypointIndex = null;
@@ -622,26 +625,68 @@ coordinateSearchPanel.innerHTML = wrapBilingualText(`
     </button>
   </div>
 
+  <div style="margin-top:9px;">
+    <label>
+      路線名稱 (Route Name)
+
+      <input
+        id="route-name-input"
+        class="coordinate-input"
+        type="text"
+        placeholder="路線 A (Route A)"
+      >
+    </label>
+  </div>
+
+  <div style="margin-top:7px;">
+    <label>
+      已儲存路線 (Saved Routes)
+
+      <select
+        id="saved-routes-select"
+        class="coordinate-input"
+      >
+        <option value="">
+          （沒有已儲存的路線）(No Saved Routes)
+        </option>
+      </select>
+    </label>
+  </div>
+
   <div style="
     margin-top:7px;
     display:grid;
-    grid-template-columns:1fr 1fr;
+    grid-template-columns:1fr 1fr 1fr;
     gap:7px;
   ">
     <button
       id="save-route-button"
       class="interface-button"
     >
-      儲存路線 (Save Route)
+      儲存 (Save)
     </button>
 
     <button
       id="load-route-button"
       class="interface-button"
     >
-      載入路線 (Load Route)
+      載入 (Load)
     </button>
 
+    <button
+      id="delete-route-button"
+      class="interface-button"
+    >
+      刪除 (Delete)
+    </button>
+  </div>
+
+  <div style="
+    margin-top:7px;
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:7px;
+  ">
     <button
       id="export-route-csv-button"
       class="interface-button"
@@ -739,6 +784,16 @@ clearCoordinateInputButton.addEventListener(
   }
 );
 
+const routeNameInput =
+  document.querySelector(
+    "#route-name-input"
+  );
+
+const savedRoutesSelect =
+  document.querySelector(
+    "#saved-routes-select"
+  );
+
 const saveRouteButton =
   document.querySelector(
     "#save-route-button"
@@ -747,6 +802,11 @@ const saveRouteButton =
 const loadRouteButton =
   document.querySelector(
     "#load-route-button"
+  );
+
+const deleteRouteButton =
+  document.querySelector(
+    "#delete-route-button"
   );
 
 const exportRouteCsvButton =
@@ -762,14 +822,27 @@ const exportRouteGeoJsonButton =
 saveRouteButton.addEventListener(
   "click",
   () => {
-    saveRouteToLocalStorage();
+    saveRouteToLocalStorage(
+      routeNameInput.value
+    );
   }
 );
 
 loadRouteButton.addEventListener(
   "click",
   () => {
-    loadRouteFromLocalStorage();
+    loadRouteByName(
+      savedRoutesSelect.value
+    );
+  }
+);
+
+deleteRouteButton.addEventListener(
+  "click",
+  () => {
+    deleteRouteByName(
+      savedRoutesSelect.value
+    );
   }
 );
 
@@ -786,6 +859,8 @@ exportRouteGeoJsonButton.addEventListener(
     exportRouteAsGeoJson();
   }
 );
+
+refreshSavedRoutesSelect();
 
 for (const input of [
   latitudeInput,
@@ -2700,13 +2775,58 @@ function createPointDataFromGeographicCoordinates(
   );
 }
 
-function setStartPointFromCoordinate(
-  point
+// ======================================================
+// 路徑點復原（Waypoint Undo）
+// ======================================================
+
+function cloneWaypointsForUndo(
+  source
 ) {
-  waypoints = [point];
+  return source.map(
+    (point) => ({
+      ...point,
+
+      worldPoint:
+        point.worldPoint.clone()
+    })
+  );
+}
+
+/**
+ * 所有會改動 `waypoints` 內容的地方都應該透過這個函式，而不是
+ * 直接指派／push／splice——這樣才能保證每一次改動之前的狀態都
+ * 被記錄下來，`undoLastWaypointChange()` 才有東西可以復原。
+ *
+ * @param {Array} newWaypoints - 改動後的完整路徑點陣列。
+ */
+function setWaypoints(
+  newWaypoints
+) {
+  waypointUndoStack.push(
+    cloneWaypointsForUndo(waypoints)
+  );
+
+  if (
+    waypointUndoStack.length >
+    MAX_WAYPOINT_UNDO_STEPS
+  ) {
+    waypointUndoStack.shift();
+  }
+
+  waypoints = newWaypoints;
+}
+
+function refreshRouteAfterWaypointChange() {
   selectedWaypointIndex = null;
 
   rebuildWaypointMarkers();
+  showCoordinateInformation();
+
+  if (waypoints.length >= 2) {
+    buildAndAnalyzeRoute();
+
+    return;
+  }
 
   removeRouteLine();
   routeSamples = [];
@@ -2714,7 +2834,42 @@ function setStartPointFromCoordinate(
   clearEnhancedHazardMarkers();
   resetEnhancedRouteProfile();
 
-  updateMissionWaitingPanel();
+  if (waypoints.length === 1) {
+    updateMissionWaitingPanel();
+  } else {
+    showMissionInstructions();
+  }
+}
+
+function undoLastWaypointChange() {
+  if (waypointUndoStack.length === 0) {
+    showCoordinateSearchMessage(
+      '<span class="lang-zh">沒有可復原的操作</span>' +
+      '<span class="lang-en">Nothing to Undo</span>',
+      "#ffcc55"
+    );
+
+    return;
+  }
+
+  waypoints =
+    waypointUndoStack.pop();
+
+  refreshRouteAfterWaypointChange();
+
+  showCoordinateSearchMessage(
+    '<span class="lang-zh">已復原上一步（Ctrl+Z 可繼續復原）</span>' +
+    '<span class="lang-en">Undid Last Change (Ctrl+Z to Continue)</span>',
+    "#42ff78"
+  );
+}
+
+function setStartPointFromCoordinate(
+  point
+) {
+  setWaypoints([point]);
+
+  refreshRouteAfterWaypointChange();
 }
 
 function addWaypointFromCoordinate(
@@ -2726,21 +2881,22 @@ function addWaypointFromCoordinate(
     return;
   }
 
+  const nextWaypoints =
+    [...waypoints];
+
   if (selectedWaypointIndex !== null) {
-    waypoints.splice(
+    nextWaypoints.splice(
       selectedWaypointIndex + 1,
       0,
       point
     );
-
-    selectedWaypointIndex = null;
   } else {
-    waypoints.push(point);
+    nextWaypoints.push(point);
   }
 
-  rebuildWaypointMarkers();
+  setWaypoints(nextWaypoints);
 
-  buildAndAnalyzeRoute();
+  refreshRouteAfterWaypointChange();
 }
 
 function focusCameraOnPoint(point) {
@@ -2945,10 +3101,15 @@ function finishWaypointPointerInteraction(
     pickTerrainPoint(event);
 
   if (point) {
-    waypoints[index] =
+    const nextWaypoints =
+      [...waypoints];
+
+    nextWaypoints[index] =
       rebuildPointUsingDemHeight(
         point
       );
+
+    setWaypoints(nextWaypoints);
   }
 
   rebuildWaypointMarkers();
@@ -3135,33 +3296,17 @@ function deleteSelectedWaypoint() {
     return;
   }
 
-  waypoints.splice(
+  const nextWaypoints =
+    [...waypoints];
+
+  nextWaypoints.splice(
     selectedWaypointIndex,
     1
   );
 
-  selectedWaypointIndex = null;
+  setWaypoints(nextWaypoints);
 
-  rebuildWaypointMarkers();
-  showCoordinateInformation();
-
-  if (waypoints.length >= 2) {
-    buildAndAnalyzeRoute();
-
-    return;
-  }
-
-  removeRouteLine();
-  routeSamples = [];
-
-  clearEnhancedHazardMarkers();
-  resetEnhancedRouteProfile();
-
-  if (waypoints.length === 1) {
-    updateMissionWaitingPanel();
-  } else {
-    showMissionInstructions();
-  }
+  refreshRouteAfterWaypointChange();
 }
 
 function pickTerrainPoint(event) {
@@ -3714,6 +3859,9 @@ function showMissionInstructions() {
     R：
     清除路線重新開始 (Clear Traverse and Start Over)<br>
 
+    Ctrl+Z：
+    復原上一步 (Undo Last Change)<br>
+
     <br>
 
     點擊路徑點旗子 (Click a Waypoint Flag)：
@@ -3737,8 +3885,8 @@ function showMissionInstructions() {
     設定點 (Set a Point)<br>
     設為起點 (Set as Start)<br>
     新增路徑點 (Add Waypoint)<br>
-    儲存路線 (Save Route)<br>
-    載入路線 (Load Route)<br>
+    輸入名稱後儲存 (Name and Save)、
+    從清單載入或刪除 (Load or Delete From List)<br>
     匯出 (Export) CSV / GeoJSON<br>
 
     <br>
@@ -3869,6 +4017,15 @@ window.addEventListener(
 
     if (key === "r") {
       resetMissionRoute();
+    }
+
+    if (
+      key === "z" &&
+      (event.ctrlKey || event.metaKey)
+    ) {
+      event.preventDefault();
+
+      undoLastWaypointChange();
     }
 
     if (key === "s") {
@@ -6624,7 +6781,10 @@ function removeRouteLine() {
 // ======================================================
 
 function resetMissionRoute() {
-  waypoints = [];
+  if (waypoints.length > 0) {
+    setWaypoints([]);
+  }
+
   selectedWaypointIndex = null;
 
   rebuildWaypointMarkers();
@@ -6819,10 +6979,103 @@ function exportRouteAsGeoJson() {
 // 52B. 路線儲存與讀取（Route Save and Load）
 // ======================================================
 
-const SAVED_ROUTE_STORAGE_KEY =
-  "lunar-terrain-saved-route-v1";
+const SAVED_ROUTES_STORAGE_KEY =
+  "lunar-terrain-saved-routes-v1";
 
-function saveRouteToLocalStorage() {
+function getSavedRoutesList() {
+  try {
+    const raw =
+      window.localStorage.getItem(
+        SAVED_ROUTES_STORAGE_KEY
+      );
+
+    const parsed =
+      raw
+        ? JSON.parse(raw)
+        : [];
+
+    return Array.isArray(parsed)
+      ? parsed
+      : [];
+  } catch (error) {
+    return [];
+  }
+}
+
+function writeSavedRoutesList(
+  savedRoutes
+) {
+  try {
+    window.localStorage.setItem(
+      SAVED_ROUTES_STORAGE_KEY,
+      JSON.stringify(savedRoutes)
+    );
+
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+
+function refreshSavedRoutesSelect() {
+  const savedRoutes =
+    getSavedRoutesList();
+
+  const previousValue =
+    savedRoutesSelect.value;
+
+  savedRoutesSelect.innerHTML = "";
+
+  if (savedRoutes.length === 0) {
+    const emptyOption =
+      document.createElement(
+        "option"
+      );
+
+    emptyOption.value = "";
+
+    emptyOption.textContent =
+      "（沒有已儲存的路線）(No Saved Routes)";
+
+    savedRoutesSelect.appendChild(
+      emptyOption
+    );
+
+    return;
+  }
+
+  for (
+    const route of savedRoutes
+  ) {
+    const option =
+      document.createElement(
+        "option"
+      );
+
+    option.value = route.name;
+
+    option.textContent =
+      `${route.name} (${route.points.length})`;
+
+    savedRoutesSelect.appendChild(
+      option
+    );
+  }
+
+  if (
+    savedRoutes.some(
+      (route) =>
+        route.name === previousValue
+    )
+  ) {
+    savedRoutesSelect.value =
+      previousValue;
+  }
+}
+
+function saveRouteToLocalStorage(
+  requestedName
+) {
   if (waypoints.length === 0) {
     showCoordinateSearchMessage(
       '<span class="lang-zh">尚未設定任何路徑點，無法儲存</span>' +
@@ -6833,42 +7086,71 @@ function saveRouteToLocalStorage() {
     return;
   }
 
-  const payload = {
+  const name =
+    requestedName.trim() ||
+    `Route ${new Date().toLocaleString()}`;
+
+  const points =
+    waypoints.map(
+      (point) => ({
+        latitudeDegrees:
+          point.latitudeDegrees,
+
+        longitudeDegrees:
+          point.longitudeDegrees
+      })
+    );
+
+  const savedRoutes =
+    getSavedRoutesList();
+
+  const existingIndex =
+    savedRoutes.findIndex(
+      (route) => route.name === name
+    );
+
+  const entry = {
+    name,
     savedAt: Date.now(),
-
-    points:
-      waypoints.map(
-        (point) => ({
-          latitudeDegrees:
-            point.latitudeDegrees,
-
-          longitudeDegrees:
-            point.longitudeDegrees
-        })
-      )
+    points
   };
 
-  try {
-    window.localStorage.setItem(
-      SAVED_ROUTE_STORAGE_KEY,
-      JSON.stringify(payload)
+  if (existingIndex === -1) {
+    savedRoutes.push(entry);
+  } else {
+    savedRoutes[existingIndex] =
+      entry;
+  }
+
+  const succeeded =
+    writeSavedRoutesList(
+      savedRoutes
     );
 
-    showCoordinateSearchMessage(
-      '<span class="lang-zh">路線已儲存至本機瀏覽器</span>' +
-      '<span class="lang-en">Traverse Saved to This Browser</span>',
-      "#42ff78"
-    );
-  } catch (error) {
+  if (!succeeded) {
     showCoordinateSearchMessage(
       '<span class="lang-zh">儲存失敗，瀏覽器儲存空間可能已滿</span>' +
       '<span class="lang-en">Save Failed — Browser Storage May Be Full</span>',
       "#ff6b6b"
     );
+
+    return;
   }
+
+  routeNameInput.value = name;
+
+  refreshSavedRoutesSelect();
+
+  savedRoutesSelect.value = name;
+
+  showCoordinateSearchMessage(
+    `<span class="lang-zh">路線「${escapeHtml(name)}」已儲存至本機瀏覽器</span>` +
+    `<span class="lang-en">Traverse "${escapeHtml(name)}" Saved to This Browser</span>`,
+    "#42ff78"
+  );
 }
 
-function loadRouteFromLocalStorage() {
+function loadRouteByName(name) {
   if (
     !terrain ||
     !terrainMetadata
@@ -6881,30 +7163,25 @@ function loadRouteFromLocalStorage() {
     return;
   }
 
-  let payload = null;
+  if (!name) {
+    showCoordinateSearchMessage(
+      '<span class="lang-zh">請先從清單選擇一條已儲存的路線</span>' +
+      '<span class="lang-en">Choose a Saved Traverse From the List First</span>',
+      "#ff6b6b"
+    );
 
-  try {
-    const raw =
-      window.localStorage.getItem(
-        SAVED_ROUTE_STORAGE_KEY
-      );
-
-    payload =
-      raw
-        ? JSON.parse(raw)
-        : null;
-  } catch (error) {
-    payload = null;
+    return;
   }
 
-  if (
-    !payload ||
-    !Array.isArray(payload.points) ||
-    payload.points.length === 0
-  ) {
+  const route =
+    getSavedRoutesList().find(
+      (entry) => entry.name === name
+    );
+
+  if (!route) {
     showCoordinateSearchMessage(
-      '<span class="lang-zh">沒有已儲存的路線</span>' +
-      '<span class="lang-en">No Saved Traverse Found</span>',
+      '<span class="lang-zh">找不到這條已儲存的路線</span>' +
+      '<span class="lang-en">Saved Traverse Not Found</span>',
       "#ff6b6b"
     );
 
@@ -6912,7 +7189,7 @@ function loadRouteFromLocalStorage() {
   }
 
   const restoredPoints =
-    payload.points
+    route.points
       .map(
         (entry) =>
           createPointDataFromGeographicCoordinates(
@@ -6934,21 +7211,15 @@ function loadRouteFromLocalStorage() {
     return;
   }
 
-  waypoints = restoredPoints;
-  selectedWaypointIndex = null;
+  setWaypoints(restoredPoints);
 
-  rebuildWaypointMarkers();
-  showCoordinateInformation();
+  refreshRouteAfterWaypointChange();
 
-  if (waypoints.length >= 2) {
-    buildAndAnalyzeRoute();
-  } else {
-    updateMissionWaitingPanel();
-  }
+  routeNameInput.value = name;
 
   const isPartial =
     restoredPoints.length <
-    payload.points.length;
+    route.points.length;
 
   showCoordinateSearchMessage(
     isPartial
@@ -6959,6 +7230,51 @@ function loadRouteFromLocalStorage() {
     isPartial
       ? "#ffcc55"
       : "#42ff78"
+  );
+}
+
+function deleteRouteByName(name) {
+  if (!name) {
+    showCoordinateSearchMessage(
+      '<span class="lang-zh">請先從清單選擇一條已儲存的路線</span>' +
+      '<span class="lang-en">Choose a Saved Traverse From the List First</span>',
+      "#ff6b6b"
+    );
+
+    return;
+  }
+
+  const savedRoutes =
+    getSavedRoutesList();
+
+  const nextSavedRoutes =
+    savedRoutes.filter(
+      (entry) => entry.name !== name
+    );
+
+  if (
+    nextSavedRoutes.length ===
+    savedRoutes.length
+  ) {
+    showCoordinateSearchMessage(
+      '<span class="lang-zh">找不到這條已儲存的路線</span>' +
+      '<span class="lang-en">Saved Traverse Not Found</span>',
+      "#ff6b6b"
+    );
+
+    return;
+  }
+
+  writeSavedRoutesList(
+    nextSavedRoutes
+  );
+
+  refreshSavedRoutesSelect();
+
+  showCoordinateSearchMessage(
+    `<span class="lang-zh">路線「${escapeHtml(name)}」已刪除</span>` +
+    `<span class="lang-en">Traverse "${escapeHtml(name)}" Deleted</span>`,
+    "#42ff78"
   );
 }
 
@@ -7028,29 +7344,24 @@ function handleTerrainClick(
   clickMarker.visible =
     true;
 
+  const nextWaypoints =
+    [...waypoints];
+
   if (selectedWaypointIndex !== null) {
-    waypoints.splice(
+    nextWaypoints.splice(
       selectedWaypointIndex + 1,
       0,
       correctedPoint
     );
-
-    selectedWaypointIndex = null;
   } else {
-    waypoints.push(
+    nextWaypoints.push(
       correctedPoint
     );
   }
 
-  rebuildWaypointMarkers();
+  setWaypoints(nextWaypoints);
 
-  showCoordinateInformation();
-
-  if (waypoints.length >= 2) {
-    buildAndAnalyzeRoute();
-  } else {
-    updateMissionWaitingPanel();
-  }
+  refreshRouteAfterWaypointChange();
 }
 
 // 初始顯示空白剖面圖
