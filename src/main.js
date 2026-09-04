@@ -147,6 +147,9 @@ let activeWaypointPointerId = null;
 let activeWaypointIndex = null;
 let waypointDragMoved = false;
 
+let activeRouteInsertPointerId = null;
+let activeRouteInsertSegmentIndex = null;
+
 let routeLine = null;
 let routeSamples = [];
 let routeSlopeColoringEnabled = false;
@@ -1314,8 +1317,14 @@ initMarkers({
   flagMarkerScale: FLAG_MARKER_SCALE
 });
 
+const CLICK_MARKER_DEFAULT_COLOR = 0xff9500;
+
 const clickMarker =
-  createSphereMarker(0xff9500);
+  createSphereMarker(
+    CLICK_MARKER_DEFAULT_COLOR
+  );
+
+clickMarker.scale.setScalar(2);
 
 clickMarker.visible = false;
 
@@ -3002,17 +3011,38 @@ renderer.domElement.addEventListener(
         event
       );
 
-    if (hitIndex === null) {
+    if (hitIndex !== null) {
+      activeWaypointPointerId =
+        event.pointerId;
+
+      activeWaypointIndex =
+        hitIndex;
+
+      waypointDragMoved = false;
+
+      controls.enabled = false;
+
+      renderer.domElement.setPointerCapture(
+        event.pointerId
+      );
+
       return;
     }
 
-    activeWaypointPointerId =
+    const routeSegmentIndex =
+      pickRouteLineSegmentIndex(
+        event
+      );
+
+    if (routeSegmentIndex === null) {
+      return;
+    }
+
+    activeRouteInsertPointerId =
       event.pointerId;
 
-    activeWaypointIndex =
-      hitIndex;
-
-    waypointDragMoved = false;
+    activeRouteInsertSegmentIndex =
+      routeSegmentIndex;
 
     controls.enabled = false;
 
@@ -3026,43 +3056,69 @@ renderer.domElement.addEventListener(
   "pointermove",
   (event) => {
     if (
-      activeWaypointIndex === null ||
-      event.pointerId !==
+      activeWaypointIndex !== null &&
+      event.pointerId ===
         activeWaypointPointerId
     ) {
-      return;
-    }
+      const movement =
+        Math.hypot(
+          event.clientX -
+          pointerDownX,
 
-    const movement =
-      Math.hypot(
-        event.clientX -
-        pointerDownX,
+          event.clientY -
+          pointerDownY
+        );
 
-        event.clientY -
-        pointerDownY
+      if (movement <= 5) {
+        return;
+      }
+
+      waypointDragMoved = true;
+
+      const point =
+        pickTerrainPoint(event);
+
+      if (!point) {
+        return;
+      }
+
+      const correctedPoint =
+        rebuildPointUsingDemHeight(
+          point
+        );
+
+      placeMarkerOnSurface(
+        waypointMarkers[
+          activeWaypointIndex
+        ],
+        correctedPoint
       );
 
-    if (movement <= 5) {
+      updateDragSafetyPreview(
+        correctedPoint
+      );
+
       return;
     }
 
-    waypointDragMoved = true;
+    if (
+      activeRouteInsertSegmentIndex !== null &&
+      event.pointerId ===
+        activeRouteInsertPointerId
+    ) {
+      const point =
+        pickTerrainPoint(event);
 
-    const point =
-      pickTerrainPoint(event);
+      if (!point) {
+        return;
+      }
 
-    if (!point) {
-      return;
+      updateDragSafetyPreview(
+        rebuildPointUsingDemHeight(
+          point
+        )
+      );
     }
-
-    placeMarkerOnSurface(
-      waypointMarkers[
-        activeWaypointIndex
-      ],
-      rebuildPointUsingDemHeight(
-        point
-      )
-    );
   }
 );
 
@@ -3090,6 +3146,8 @@ function finishWaypointPointerInteraction(
   activeWaypointPointerId = null;
   activeWaypointIndex = null;
   waypointDragMoved = false;
+
+  hideDragSafetyPreview();
 
   if (!moved) {
     toggleWaypointSelection(index);
@@ -3122,6 +3180,52 @@ function finishWaypointPointerInteraction(
   }
 }
 
+function finishRouteInsertPointerInteraction(
+  event
+) {
+  const segmentIndex =
+    activeRouteInsertSegmentIndex;
+
+  controls.enabled = true;
+
+  if (
+    renderer.domElement.hasPointerCapture(
+      event.pointerId
+    )
+  ) {
+    renderer.domElement.releasePointerCapture(
+      event.pointerId
+    );
+  }
+
+  activeRouteInsertPointerId = null;
+  activeRouteInsertSegmentIndex = null;
+
+  hideDragSafetyPreview();
+
+  const point =
+    pickTerrainPoint(event);
+
+  if (!point) {
+    return;
+  }
+
+  const nextWaypoints =
+    [...waypoints];
+
+  nextWaypoints.splice(
+    segmentIndex + 1,
+    0,
+    rebuildPointUsingDemHeight(
+      point
+    )
+  );
+
+  setWaypoints(nextWaypoints);
+
+  refreshRouteAfterWaypointChange();
+}
+
 renderer.domElement.addEventListener(
   "pointerup",
   (event) => {
@@ -3131,6 +3235,18 @@ renderer.domElement.addEventListener(
         activeWaypointPointerId
     ) {
       finishWaypointPointerInteraction(
+        event
+      );
+
+      return;
+    }
+
+    if (
+      activeRouteInsertSegmentIndex !== null &&
+      event.pointerId ===
+        activeRouteInsertPointerId
+    ) {
+      finishRouteInsertPointerInteraction(
         event
       );
 
@@ -3164,30 +3280,55 @@ renderer.domElement.addEventListener(
   "pointercancel",
   (event) => {
     if (
-      activeWaypointIndex === null ||
-      event.pointerId !==
+      activeWaypointIndex !== null &&
+      event.pointerId ===
         activeWaypointPointerId
     ) {
+      controls.enabled = true;
+
+      if (
+        renderer.domElement.hasPointerCapture(
+          event.pointerId
+        )
+      ) {
+        renderer.domElement.releasePointerCapture(
+          event.pointerId
+        );
+      }
+
+      activeWaypointPointerId = null;
+      activeWaypointIndex = null;
+      waypointDragMoved = false;
+
+      hideDragSafetyPreview();
+
+      rebuildWaypointMarkers();
+
       return;
     }
 
-    controls.enabled = true;
-
     if (
-      renderer.domElement.hasPointerCapture(
-        event.pointerId
-      )
+      activeRouteInsertSegmentIndex !== null &&
+      event.pointerId ===
+        activeRouteInsertPointerId
     ) {
-      renderer.domElement.releasePointerCapture(
-        event.pointerId
-      );
+      controls.enabled = true;
+
+      if (
+        renderer.domElement.hasPointerCapture(
+          event.pointerId
+        )
+      ) {
+        renderer.domElement.releasePointerCapture(
+          event.pointerId
+        );
+      }
+
+      activeRouteInsertPointerId = null;
+      activeRouteInsertSegmentIndex = null;
+
+      hideDragSafetyPreview();
     }
-
-    activeWaypointPointerId = null;
-    activeWaypointIndex = null;
-    waypointDragMoved = false;
-
-    rebuildWaypointMarkers();
   }
 );
 
@@ -3260,6 +3401,115 @@ function pickWaypointMarkerIndex(
 
   return waypointMarkers.indexOf(
     hitObject
+  );
+}
+
+/**
+ * 偵測滑鼠／觸控是否點在路線白線上，回傳這段線落在「哪兩個
+ * 路徑點之間」（也就是要插入新點時，`waypoints` 陣列裡該插在
+ * 這個索引 +1 的位置）；沒點到線就回傳 null。
+ */
+function pickRouteLineSegmentIndex(
+  event
+) {
+  if (
+    !routeLine ||
+    routeLine.children.length === 0
+  ) {
+    return null;
+  }
+
+  const rect =
+    renderer.domElement
+      .getBoundingClientRect();
+
+  pointer.x =
+    (
+      (
+        event.clientX -
+        rect.left
+      ) /
+      rect.width
+    ) *
+    2 -
+    1;
+
+  pointer.y =
+    -(
+      (
+        event.clientY -
+        rect.top
+      ) /
+      rect.height
+    ) *
+    2 +
+    1;
+
+  raycaster.setFromCamera(
+    pointer,
+    camera
+  );
+
+  const intersections =
+    raycaster.intersectObjects(
+      routeLine.children,
+      false
+    );
+
+  if (
+    intersections.length === 0
+  ) {
+    return null;
+  }
+
+  const waypointSegmentIndex =
+    intersections[0].object
+      .userData
+      .waypointSegmentIndex;
+
+  return (
+    typeof waypointSegmentIndex ===
+    "number"
+  )
+    ? waypointSegmentIndex
+    : null;
+}
+
+/**
+ * 拖曳路徑點／在路線上拉出新點時，即時把 `clickMarker` 移到目前
+ * 位置，並依當地地形坡度即時換成安全分色（跟路線分級著色用
+ * 同一套顏色），放開滑鼠前就能看出這裡安不安全。
+ */
+function updateDragSafetyPreview(
+  point
+) {
+  placeMarkerOnSurface(
+    clickMarker,
+    point
+  );
+
+  clickMarker.visible = true;
+
+  const slopeDegrees =
+    sampleLocalSlopeDegrees(
+      point.localXKm,
+      point.localZKm
+    );
+
+  clickMarker.material.color.set(
+    Number.isFinite(slopeDegrees)
+      ? getEnhancedRouteSlopeColorHex(
+          slopeDegrees
+        )
+      : CLICK_MARKER_DEFAULT_COLOR
+  );
+}
+
+function hideDragSafetyPreview() {
+  clickMarker.visible = false;
+
+  clickMarker.material.color.set(
+    CLICK_MARKER_DEFAULT_COLOR
   );
 }
 
@@ -3839,6 +4089,73 @@ function getElevationAtPixel(
   ];
 }
 
+/**
+ * 在任意場景本地座標（不需要剛好落在 DEM 像素格點上）估計地形
+ * 坡度，用來在拖曳路徑點／插入新點時即時顯示安全分色回饋——跟
+ * `createSlopeColorMap()` 用的是同一種「東西南北鄰近點高度差」
+ * 算法，只是改用雙線性內插取樣，可以在任意連續座標上取值。
+ *
+ * @returns {number} 坡度（度）；資料無效時回傳 NaN。
+ */
+function sampleLocalSlopeDegrees(
+  localXKm,
+  localZKm
+) {
+  const stepKm =
+    Math.max(
+      terrainMetadata.pixelSizeXMeters,
+      terrainMetadata.pixelSizeYMeters
+    ) /
+    1000;
+
+  const eastElevation =
+    sampleElevationBilinear(
+      localXKm + stepKm,
+      localZKm
+    );
+
+  const westElevation =
+    sampleElevationBilinear(
+      localXKm - stepKm,
+      localZKm
+    );
+
+  const northElevation =
+    sampleElevationBilinear(
+      localXKm,
+      localZKm - stepKm
+    );
+
+  const southElevation =
+    sampleElevationBilinear(
+      localXKm,
+      localZKm + stepKm
+    );
+
+  if (
+    !isValidElevation(eastElevation) ||
+    !isValidElevation(westElevation) ||
+    !isValidElevation(northElevation) ||
+    !isValidElevation(southElevation)
+  ) {
+    return NaN;
+  }
+
+  const slopeX =
+    (eastElevation - westElevation) /
+    (2 * stepKm * 1000);
+
+  const slopeZ =
+    (southElevation - northElevation) /
+    (2 * stepKm * 1000);
+
+  return THREE.MathUtils.radToDeg(
+    Math.atan(
+      Math.hypot(slopeX, slopeZ)
+    )
+  );
+}
+
 // ======================================================
 // 33. 路線清除與說明（Route Reset and Instructions）
 // ======================================================
@@ -3873,6 +4190,9 @@ function showMissionInstructions() {
     選取後點擊地形 (Click Terrain After Selecting)：
     在其後插入新點 (Insert a New Point After It)<br>
 
+    直接拖曳路線白線 (Drag the White Traverse Line)：
+    在拉出的位置插入新點 (Insert a New Point Where You Drop It)<br>
+
     選取後按刪除鍵 (Press Delete After Selecting)：
     移除該點 (Remove It)<br>
 
@@ -3895,7 +4215,8 @@ function showMissionInstructions() {
       綠色標記 (Green Marker)：起點 (Start)<br>
       琥珀色標記 (Amber Marker)：路徑點 (Waypoint)<br>
       紅色標記 (Red Marker)：終點 (Destination)<br>
-      橘色標記 (Orange Marker)：搜尋位置 (Search Location)<br>
+      橘色標記 (Orange Marker)：搜尋位置 (Search Location)，
+      拖曳時會即時顯示安全分色 (Recolors Live by Slope Safety While Dragging)<br>
       白色線 (White Line)：貼地路線 (Ground-Hugging Traverse)
     </span>
   `);
@@ -4831,6 +5152,9 @@ function createEnhancedColoredRoute(
 
     segment.userData.slopeDegrees =
       current.slopeDegrees;
+
+    segment.userData.waypointSegmentIndex =
+      current.waypointSegmentIndex;
 
     routeLine.add(
       segment
@@ -6677,7 +7001,7 @@ function buildAndAnalyzeRoute() {
         continue;
       }
 
-      routeSamples.push(
+      const sample =
         createPointDataFromWorldPoint(
           new THREE.Vector3(
             localXKm,
@@ -6688,8 +7012,15 @@ function buildAndAnalyzeRoute() {
 
             localZKm
           )
-        )
-      );
+        );
+
+      // 記錄這個取樣點落在「哪兩個路徑點之間」，之後在路線
+      // 白線上拖曳插入新點時，才知道要插進 waypoints 陣列的
+      // 哪個位置（segment + 1）。
+      sample.waypointSegmentIndex =
+        segment;
+
+      routeSamples.push(sample);
     }
   }
 
