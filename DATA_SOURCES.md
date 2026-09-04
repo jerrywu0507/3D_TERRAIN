@@ -210,11 +210,12 @@ space accordingly if fetching several sites for comparison.
 
 The app's local X/Z scene coordinates are simply the DEM's projected
 South-Polar-Stereographic X/Y coordinates (in metres) recentred on the
-loaded terrain's bounding box (see `main.js`, `localToProjectedCoordinates` /
-`projectedToLocalCoordinates`). Latitude/longitude are recovered from those
-projected coordinates with the standard polar stereographic inverse formula
-(see `forwardSouthPolarStereographic` / `inverseSouthPolarStereographic` in
-`main.js`).
+loaded terrain's bounding box (see `src/coordinate-transforms.js`,
+`localToProjectedCoordinates` / `projectedToLocalCoordinates`).
+Latitude/longitude are recovered from those projected coordinates with the
+standard polar stereographic inverse formula (see
+`forwardSouthPolarStereographic` / `inverseSouthPolarStereographic`, same
+file).
 
 Because the projection's central meridian is fixed at 0°, the scene's local
 +X/+Z axes only line up with true East/North exactly at longitude 0°. Away

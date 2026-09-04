@@ -3,9 +3,9 @@
 This document explains how the application turns a lunar DEM into the 3D terrain,
 coordinate readouts, and rover-route safety analysis shown on screen — for anyone
 reviewing the code (e.g., for a JPL/NASA collaboration) who needs to understand the
-logic without reading all ~10,200 lines of source.
+logic without reading all ~10,900 lines of source.
 
-*Last verified: 2026-09-01 — all file/line references below were checked
+*Last verified: 2026-09-04 — all file/line references below were checked
 against the current state of the repository on this date. If the code has
 changed since, re-check line numbers with e.g. `grep -n "function name"
 src/main.js` before citing them elsewhere.*
@@ -240,12 +240,12 @@ quaternion. Two call sites apply it:
   regrouped into a rotatable sub-group once, and that sub-group's
   quaternion is set directly.
 - `axesHelper.quaternion.copy(computeGlobalAxisOrientationQuaternion(...))`
-  (`main.js:2351`) — for the in-scene axis helper. This object is a plain
+  (`main.js:2435`) — for the in-scene axis helper. This object is a plain
   `THREE.Group` added directly to `scene` (not a `ViewHelper`), so its
   quaternion can just be set directly with no extra workaround.
 
 `main.js` calls both once the terrain's centre latitude/longitude are known
-(inside `updateStatusPanel()`, `main.js:2342`/`2351`).
+(inside `updateStatusPanel()`, `main.js:2426`/`2435`).
 
 ### 4.4 In-scene axis helper and gizmo caption
 
@@ -263,7 +263,7 @@ or barely reaching the terrain's edge.
 Because both the corner gizmo and the in-scene axis helper now show the
 *global* frame rather than local compass directions, a small fixed caption
 ("全域坐標系 MOON_ME (Global Frame)" / "MOON_ME Global Frame") is anchored
-directly above the corner gizmo (`main.js:262`) so it isn't mistaken for a
+directly above the corner gizmo (`main.js:268`) so it isn't mistaken for a
 compass. It's set via `element.innerHTML` with manually-written
 `lang-zh`/`lang-en` spans rather than `wrapBilingualText()`'s automatic
 Chinese/English detection, because that regex requires the parenthesised
@@ -276,7 +276,7 @@ breaks that pattern.
 - Users click the terrain to add waypoints (`waypoints` array); the route is
   sampled at `ROUTE_SAMPLE_INTERVAL_METERS` (5 m) intervals with DEM
   bilinear interpolation for elevation.
-- `analyzeRoute()` (`main.js:4359`) computes, per sample, the **segment**
+- `analyzeRoute()` (`main.js:4837`) computes, per sample, the **segment**
   slope — `atan2(elevationDifference, thatSegment'sOwnHorizontalDistance)` —
   along with cumulative ascent/descent, horizontal and surface-path distance,
   and the location of maximum slope/ascent/descent/sudden elevation change.
@@ -284,7 +284,7 @@ breaks that pattern.
   from the route start instead of each segment's own distance, which made
   slope readings shrink toward 0° as the route got longer; this has been
   fixed and re-verified.)
-- `classifySlope()` (`main.js:3760`) buckets slope into Safe (≤10°) /
+- `classifySlope()` (`main.js:4229`) buckets slope into Safe (≤10°) /
   Warning (>10° and ≤15°) / Unsafe (>15°) — a **terrain-slope-only**
   preliminary classification. It does not yet account for rocks, small
   craters, cross-slope, rover geometry/centre of gravity, soil conditions,
@@ -294,21 +294,64 @@ breaks that pattern.
   classification (a per-segment `THREE.TubeGeometry`/`MeshBasicMaterial`),
   toggled from the Cross Section panel; by default it renders as a single
   flat colour.
-- **Route persistence** (`saveRouteToLocalStorage()` /
-  `loadRouteFromLocalStorage()`, `main.js:6825`/`6871`): "Save Route" writes
-  only the waypoints' latitude/longitude (not elevation, distance, or slope —
-  those are recomputed on load by re-sampling the currently-loaded terrain)
-  as a single JSON payload under one fixed key (`SAVED_ROUTE_STORAGE_KEY`) in
-  the browser's `localStorage`. This means: (a) the save is entirely
-  client-side — nothing is sent to a server; (b) there is only **one** save
-  slot, so saving again overwrites the previous save; (c) the saved route is
-  scoped to that specific browser (and that specific origin/URL) — it will
-  not appear on a different device, browser, or hostname; (d) if the
-  terrain currently loaded doesn't cover the saved coordinates, loading will
-  fail gracefully rather than showing garbage. Exporting to CSV/GeoJSON
-  (`exportRouteAsCsv()` / `exportRouteAsGeoJson()`, `main.js:6691`/`6743`)
-  is unrelated to this storage and produces a downloadable file with the
-  full computed route data instead.
+
+### 5.1 Editing, undo, and live safety feedback
+
+Every code path that changes `waypoints` — clicking the terrain, dragging a
+waypoint, inserting after a selected point, deleting, pressing `R` to reset,
+and loading a saved route — goes through a single setter, `setWaypoints()`
+(`main.js:2811`), instead of assigning/`push`/`splice`-ing the array
+directly. `setWaypoints()` pushes a clone of the *current* array onto
+`waypointUndoStack` (capped at `MAX_WAYPOINT_UNDO_STEPS` = 50,
+`main.js:144`) before applying the change, so `undoLastWaypointChange()`
+(`main.js:2853`, bound to **Ctrl+Z**) can always pop the most recent
+snapshot back. `refreshRouteAfterWaypointChange()` (`main.js:2828`)
+centralises the "rebuild markers, rebuild the route if there are ≥2 points,
+otherwise clear it" sequence every one of those call sites needs afterward.
+
+A waypoint can also be inserted by dragging directly on the white route
+line, not just by selecting an existing waypoint first. `buildAndAnalyzeRoute()`
+stamps each dense route sample with `waypointSegmentIndex` — which pair of
+waypoints it falls between (`main.js:7020`) — and `createEnhancedColoredRoute()`
+(`main.js:5075`) copies that onto each rendered tube segment's
+`userData.waypointSegmentIndex` (`main.js:5156`). `pickRouteLineSegmentIndex()`
+(`main.js:3412`) raycasts the route line to read that index back out on
+`pointerdown`, and `finishRouteInsertPointerInteraction()` (`main.js:3183`)
+splices a new waypoint in at `segmentIndex + 1` on release — so the insert
+position always lands between the correct pair of waypoints regardless of
+how many dense samples make up the visual line.
+
+While dragging either an existing waypoint or a point being pulled out of
+the route line, the orange marker (`clickMarker`, otherwise used for the
+last click/search location) follows the cursor and recolours live via
+`updateDragSafetyPreview()` (`main.js:3483`), using `sampleLocalSlopeDegrees()`
+(`main.js:4100`) — a bilinear-interpolated finite-difference slope estimate
+at the exact drag position (step size = one DEM pixel) — fed through the
+same `getEnhancedRouteSlopeColorHex()` safe/warning/unsafe palette the route
+line itself uses. This gives a safety read on where the point would land
+*before* release, rather than only after the route is rebuilt.
+
+### 5.2 Saved routes and export
+
+**Named route storage** (`saveRouteToLocalStorage()` / `loadRouteByName()` /
+`deleteRouteByName()`, `main.js:7407`/`7484`/`7567`): routes are stored as a
+JSON array under one `localStorage` key (`SAVED_ROUTES_STORAGE_KEY`,
+`main.js:7313`), each entry `{ name, savedAt, points }` where `points` holds
+only latitude/longitude (elevation, distance, and slope are recomputed on
+load by re-sampling the currently-loaded terrain). Saving under a name that
+already exists overwrites that entry; anything else is added as a new
+entry — so, unlike the single-slot scheme this replaced, an arbitrary
+number of named routes can coexist and be loaded/deleted individually from
+a dropdown. This means: (a) storage is entirely client-side — nothing is
+sent to a server; (b) saved routes are scoped to that specific browser (and
+origin/URL) — they will not appear on a different device, browser, or
+hostname; (c) if the terrain currently loaded doesn't cover a saved route's
+coordinates, loading fails gracefully (partial coverage shows a "some
+points were outside range and skipped" message) rather than showing
+garbage. Exporting to CSV/GeoJSON (`exportRouteAsCsv()` /
+`exportRouteAsGeoJson()`, `main.js:7182`/`7234`) is unrelated to this
+storage and produces a downloadable file with the full computed route data
+instead.
 
 ## 6. On-Screen Data Attribution
 
@@ -354,11 +397,23 @@ adopted, not just reasoned about in the abstract:
   to capture and inspect the live rendered page from outside a browser in
   this environment — such changes rely on manual visual confirmation in the
   browser rather than automated screenshot testing.
+- **Route-editing interaction changes (section 5.1)** — undo, drag-to-insert
+  on the route line, and the live slope-safety preview — were only checked
+  this way (production build succeeds, code paths reasoned through by
+  reading them back) as of this document's last-verified date; unlike some
+  earlier changes in this section, the actual pointer-drag feel (hit-testing
+  accuracy, preview responsiveness) had not yet been manually exercised in a
+  real browser at that point, since no headless-browser tooling
+  (`chromium-cli`, Playwright, etc.) was available in the authoring
+  environment. Treat this specific feature as build-verified but not yet
+  interaction-tested until someone confirms it by hand.
 
 ## 8. Tech Stack and Deployment
 
 - **Rendering:** [three.js](https://threejs.org/) (WebGL), including the
-  `OrbitControls` and `ViewHelper` addons.
+  `OrbitControls` and `ViewHelper` addons. `OrbitControls.maxPolarAngle` is
+  set to `Math.PI` (full range) so the camera can orbit completely around
+  and underneath the terrain rather than being capped near the horizon.
 - **Build tool:** [Vite](https://vitejs.dev/); `npm run dev` for local
   development, `npm run build` produces a static `dist/` bundle.
 - **Runtime:** pure client-side static site — no backend server, no
@@ -376,7 +431,7 @@ adopted, not just reasoned about in the abstract:
 
 ## 9. Error Handling and Failure Modes
 
-- **Terrain data fails to load** (`loadTerrainData()`, `main.js:1435`
+- **Terrain data fails to load** (`loadTerrainData()`, `main.js:1519`
   catch block) — e.g. the network request fails, or `heightmap_float32.bin`
   is corrupt/mismatched with its metadata: the error is logged to the
   browser console, the DEM Status panel shows the raw error message, and
@@ -390,11 +445,14 @@ adopted, not just reasoned about in the abstract:
   cells), the Mission panel shows "Traverse Creation Failed / Insufficient
   Valid Elevation Data Along the Traverse" instead of attempting to render a
   route with missing data.
-- **`localStorage` unavailable or full** — `saveRouteToLocalStorage()`
-  (section 5) wraps the write in a `try`/`catch` and shows an explicit
-  "Save Failed — Browser Storage May Be Full" message rather than failing
-  silently (this also covers private-browsing modes where `localStorage`
-  writes can throw).
+- **`localStorage` unavailable or full** — `writeSavedRoutesList()`
+  (section 5.2, `main.js:7336`) wraps the write in a `try`/`catch` and
+  returns `false` on failure; `saveRouteToLocalStorage()` then shows an
+  explicit "Save Failed — Browser Storage May Be Full" message rather than
+  failing silently (this also covers private-browsing modes where
+  `localStorage` writes can throw). `getSavedRoutesList()` (`main.js:7316`)
+  similarly falls back to an empty list rather than throwing if the stored
+  JSON is missing or corrupt.
 - **General pattern:** the app favors showing a specific, human-readable
   bilingual error/status message in the relevant panel over throwing an
   unhandled exception or leaving stale/blank UI state — but this is applied

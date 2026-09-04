@@ -19,10 +19,11 @@ hazardous sections along the way.
   and finds/fills isolated cone-shaped terrain artifacts; results (NoData
   count, repaired-pixel count, spike-correction count, etc.) are shown in
   the DEM Status panel
-- **Direction gizmo**: a 3D compass in the bottom-right corner labeled with
-  East/South/West/North and Zenith; automatically corrects for "meridian
-  convergence" based on the terrain's center longitude, so it points to true
-  geographic directions rather than the scene's raw grid axes
+- **Direction gizmo**: a 3D orientation indicator in the bottom-right corner
+  plus an in-scene axis helper (`A` key), both labeled X/Y/Z and rotated to
+  show the Moon's global body-fixed reference frame (**MOON_ME**: Z = mean
+  rotational pole, X = toward the prime meridian, Y completes a right-handed
+  system) rather than the scene's local grid axes or a local compass
 - **Coordinate query**: click the terrain or enter a latitude/longitude to
   read that point's lunar surface coordinates, projected coordinates, and
   absolute elevation
@@ -35,9 +36,19 @@ hazardous sections along the way.
   - Route safety status (based on slope classification)
 - **Waypoint editing**: click a waypoint flag to select it, then drag to
   move it, click the terrain to insert a new point after it, or press
-  `Delete` to remove it
-- **Route export/save**: export the current route as CSV or GeoJSON, or save
-  it locally in the browser (reloadable after a page refresh)
+  `Delete` to remove it; you can also drag directly on the route's white
+  line to insert a new point exactly where you drop it, without selecting
+  anything first
+- **Undo**: every waypoint change (add, move, insert, delete, reset, load)
+  can be undone with `Ctrl+Z`, up to 50 steps back
+- **Live slope-safety preview while dragging**: while dragging a waypoint
+  or pulling a new point out of the route line, the marker recolors in
+  real time (Safe/Passable/Warning/Unsafe) based on the terrain slope right
+  under the cursor, before you release
+- **Named route save/load**: save the current route under any name, then
+  load or delete any previously saved route from a dropdown — multiple
+  routes can be kept side by side in the browser, not just one; export the
+  current route as CSV or GeoJSON at any time
 - **Route elevation profile**: an elevation-vs-distance chart along the
   route; hover anywhere on the chart to see the distance/elevation/slope/
   lat-lon at that point. A "Slope Safety Coloring" toggle switches the 3D
@@ -119,13 +130,14 @@ npm run preview   # Preview the production build
 
 | Action | Description |
 |---|---|
-| Left-click drag | Rotate the view |
+| Left-click drag | Rotate the view (full 360°, including underneath the terrain) |
 | Mouse wheel | Zoom |
 | Right-click drag | Pan |
 | Click the terrain | First click sets the start point; each click after that adds a waypoint in sequence; press `R` to clear the route and start over |
 | Click a waypoint flag | Select/deselect that waypoint |
 | Drag a waypoint flag | Move that waypoint's position |
 | Click the terrain after selecting a waypoint | Insert a new waypoint after it |
+| Drag the route's white line | Insert a new waypoint where you drop it |
 | Press `Delete` after selecting a waypoint | Remove that waypoint |
 
 ### Keyboard Shortcuts
@@ -137,6 +149,7 @@ npm run preview   # Preview the production build
 | `S` | Show/hide the slope layer |
 | `E` | Show/hide the elevation-band layer |
 | `R` | Clear the current route |
+| `Ctrl+Z` | Undo the last waypoint change |
 | `Delete` / `Backspace` | Remove the selected waypoint |
 | `Esc` | Deselect the selected waypoint |
 | `U` | Show/hide the whole interface |
@@ -147,15 +160,17 @@ npm run preview   # Preview the production build
 ```
 ├── index.html                 # Entry point
 ├── src/
-│   ├── main.js                 # Main program: scene setup, DEM loading/
-│   │                            # cleaning, coordinate transforms, terrain
-│   │                            # picking, route planning/analysis, animation loop
+│   ├── main.js                 # Main program: scene setup, DEM loading,
+│   │                            # terrain picking, route planning/analysis
+│   │                            # (incl. undo, drag-to-insert), animation loop
+│   ├── dem-cleaning.js         # DEM elevation cleaning (pure functions)
+│   ├── coordinate-transforms.js # Projected/local/geographic coordinate math
 │   ├── loading-overlay.js      # Full-screen loading overlay (with download %)
-│   ├── view-gizmo.js           # 3D direction gizmo (with meridian-convergence correction)
+│   ├── view-gizmo.js           # 3D direction gizmo, global MOON_ME frame
 │   ├── ui-core.js              # Shared panel UI (drag/resize, bilingual text, interface scaling)
 │   ├── moon-overview.js        # Moon overview inset
 │   ├── markers.js              # Marker (flag/dot) geometry construction utilities
-│   └── utils.js                # Shared formatting helper functions
+│   └── utils.js                # Shared formatting/validation helper functions
 ├── public/
 │   ├── heightmap_float32.bin   # Terrain elevation data
 │   ├── heightmap_metadata.json # Terrain metadata
