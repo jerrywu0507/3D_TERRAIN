@@ -103,7 +103,7 @@ export function createFlagMarker(color) {
 
   const poleMaterial =
     new THREE.MeshBasicMaterial({
-      color: 0xdddddd,
+      color: 0x000000,
       depthTest: false,
       depthWrite: false
     });
