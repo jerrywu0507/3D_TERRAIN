@@ -5,12 +5,12 @@ import * as THREE from "three";
 //
 // initUiCore() 必須在使用其他任何 export 之前呼叫一次，
 // 用來注入會隨時間變動的外部狀態（介面縮放比例、目前語言）
-// 與 OrbitControls 實例（拖曳/縮放面板時需要暫時停用）。
+// 與相機控制器實例（拖曳/縮放面板時需要暫時停用）。
 // ======================================================
 
 let getInterfaceScale = () => 1;
 let getCurrentLanguage = () => "en";
-let orbitControls = null;
+let cameraControls = null;
 
 export function initUiCore({
   defaultInterfaceScale,
@@ -20,7 +20,7 @@ export function initUiCore({
 }) {
   getInterfaceScale = getInterfaceScaleFn;
   getCurrentLanguage = getCurrentLanguageFn;
-  orbitControls = controls;
+  cameraControls = controls;
 
   const interfaceStyle =
     document.createElement("style");
@@ -475,7 +475,7 @@ export function makePanelDraggable(
 
       bringPanelToFront(panel);
 
-      orbitControls.enabled = false;
+      cameraControls.enabled = false;
 
       handle.setPointerCapture(
         pointerId
@@ -565,7 +565,7 @@ export function makePanelDraggable(
     }
 
     pointerId = null;
-    orbitControls.enabled = true;
+    cameraControls.enabled = true;
   }
 
   handle.addEventListener(
@@ -666,7 +666,7 @@ export function makePanelResizable(panel) {
 
           bringPanelToFront(panel);
 
-          orbitControls.enabled = false;
+          cameraControls.enabled = false;
 
           handle.setPointerCapture(
             pointerId
@@ -820,7 +820,7 @@ export function makePanelResizable(panel) {
         }
 
         pointerId = null;
-        orbitControls.enabled = true;
+        cameraControls.enabled = true;
       }
 
       handle.addEventListener(
