@@ -357,6 +357,22 @@ fillLight.position.set(
 
 scene.add(fillLight);
 
+// 由下往上的補光。地形材質是 DoubleSide，相機繞到地形下方時
+// 看到的是被翻轉法線的底面；其餘光源都在上方，底面只剩環境光，
+// 會整片糊成一塊沒有起伏的灰色。
+const underLight = new THREE.DirectionalLight(
+  0x93a6c4,
+  0.9
+);
+
+underLight.position.set(
+  12,
+  -20,
+  -8
+);
+
+scene.add(underLight);
+
 // ======================================================
 // 6. 網格與座標軸（Grid and Axes）
 // ======================================================
