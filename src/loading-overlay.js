@@ -28,6 +28,13 @@ loadingOverlayStyle.textContent = `
     pointer-events: none;
   }
 
+  /* 顯示錯誤時仍要讓滑鼠事件穿透到底下的畫布，
+     否則這層全螢幕的覆蓋層會讓視角完全無法操作。 */
+  .loading-overlay.has-error {
+    background: rgba(5, 6, 8, 0.82);
+    pointer-events: none;
+  }
+
   .loading-overlay-spinner {
     width: 48px;
     height: 48px;
