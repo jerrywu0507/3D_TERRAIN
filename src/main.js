@@ -65,11 +65,16 @@ import {
 
 const VERTICAL_EXAGGERATION = 1;
 
-const METADATA_URL = "/heightmap_metadata.json";
-const HEIGHTMAP_URL = "/heightmap_float32.bin";
+// public/ 底下的資源改以建置時的 base 組出路徑（結尾一定帶斜線）。
+// 原本寫死成 "/heightmap_float32.bin" 這種根目錄絕對路徑，
+// 部署在子路徑（例如 /terrain/）時會被解析到網站根目錄而全部 404。
+const ASSET_BASE_URL = import.meta.env.BASE_URL;
 
-const MOON_OVERVIEW_COLOR_MAP_URL = "/moon/lroc_color_2k.jpg";
-const MOON_OVERVIEW_BUMP_MAP_URL = "/moon/ldem_3_8bit.jpg";
+const METADATA_URL = `${ASSET_BASE_URL}heightmap_metadata.json`;
+const HEIGHTMAP_URL = `${ASSET_BASE_URL}heightmap_float32.bin`;
+
+const MOON_OVERVIEW_COLOR_MAP_URL = `${ASSET_BASE_URL}moon/lroc_color_2k.jpg`;
+const MOON_OVERVIEW_BUMP_MAP_URL = `${ASSET_BASE_URL}moon/ldem_3_8bit.jpg`;
 
 const DEFAULT_MOON_RADIUS_METERS = 1_737_400;
 const CENTRAL_MERIDIAN_DEGREES = 0;
