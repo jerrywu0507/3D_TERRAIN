@@ -78,6 +78,12 @@ const ROUTE_SAMPLE_INTERVAL_METERS = 5;
 const ROUTE_SURFACE_OFFSET_KM = 0.0001;
 const ROUTE_LINE_RADIUS_KM = 0.006;
 
+// 地形點選：沿射線在高度圖上行進取樣，取代對整個地形網格做 raycast。
+// 2000×2000 的 DEM 會產生約 800 萬個三角形，Three.js 的暴力 raycast
+// 每次需要數百毫秒，用在 pointermove 上會讓拖曳完全卡住。
+const TERRAIN_PICK_MAX_MARCH_STEPS = 4096;
+const TERRAIN_PICK_REFINE_ITERATIONS = 20;
+
 const MARKER_RADIUS_KM = 0.008;
 const MARKER_SURFACE_GAP_KM = 0.001;
 const FLAG_MARKER_SCALE = 6.4;
@@ -3559,6 +3565,349 @@ function deleteSelectedWaypoint() {
   refreshRouteAfterWaypointChange();
 }
 
+// 取得世界座標 (localXKm, localZKm) 處的地表高度（世界單位，公里）。
+// 落在 DEM 範圍外或該處資料無效時回傳 NaN。
+function sampleTerrainSurfaceY(
+  localXKm,
+  localZKm
+) {
+  const elevationMeters =
+    sampleElevationBilinear(
+      localXKm,
+      localZKm
+    );
+
+  if (
+    !Number.isFinite(
+      elevationMeters
+    )
+  ) {
+    return NaN;
+  }
+
+  return (
+    elevationMeters / 1000
+  ) *
+  VERTICAL_EXAGGERATION;
+}
+
+// 射線在距離 distanceKm 處，高於地表多少（正值＝在地表之上）。
+// 該處沒有有效地形資料時回傳 NaN。
+function signedHeightAboveTerrain(
+  ray,
+  distanceKm
+) {
+  const x =
+    ray.origin.x +
+    ray.direction.x *
+    distanceKm;
+
+  const y =
+    ray.origin.y +
+    ray.direction.y *
+    distanceKm;
+
+  const z =
+    ray.origin.z +
+    ray.direction.z *
+    distanceKm;
+
+  const surfaceY =
+    sampleTerrainSurfaceY(
+      x,
+      z
+    );
+
+  if (
+    !Number.isFinite(surfaceY)
+  ) {
+    return NaN;
+  }
+
+  return y - surfaceY;
+}
+
+// 用 slab method 求射線與地形包圍盒相交的距離區間，
+// 讓行進取樣只在真正可能命中的範圍內進行。
+function intersectTerrainBoundsRange(
+  ray
+) {
+  const bounds =
+    terrain?.geometry?.boundingBox;
+
+  if (!bounds) {
+    return null;
+  }
+
+  const origin = [
+    ray.origin.x,
+    ray.origin.y,
+    ray.origin.z
+  ];
+
+  const direction = [
+    ray.direction.x,
+    ray.direction.y,
+    ray.direction.z
+  ];
+
+  const minimum = [
+    bounds.min.x,
+    bounds.min.y,
+    bounds.min.z
+  ];
+
+  const maximum = [
+    bounds.max.x,
+    bounds.max.y,
+    bounds.max.z
+  ];
+
+  let enterDistance = 0;
+  let exitDistance = Infinity;
+
+  for (
+    let axis = 0;
+    axis < 3;
+    axis += 1
+  ) {
+    if (
+      Math.abs(
+        direction[axis]
+      ) < 1e-12
+    ) {
+      // 射線平行於這組平面，起點在範圍外就永遠不會命中
+      if (
+        origin[axis] < minimum[axis] ||
+        origin[axis] > maximum[axis]
+      ) {
+        return null;
+      }
+
+      continue;
+    }
+
+    const inverseDirection =
+      1 / direction[axis];
+
+    let nearDistance =
+      (
+        minimum[axis] -
+        origin[axis]
+      ) *
+      inverseDirection;
+
+    let farDistance =
+      (
+        maximum[axis] -
+        origin[axis]
+      ) *
+      inverseDirection;
+
+    if (nearDistance > farDistance) {
+      const swap = nearDistance;
+
+      nearDistance = farDistance;
+      farDistance = swap;
+    }
+
+    enterDistance =
+      Math.max(
+        enterDistance,
+        nearDistance
+      );
+
+    exitDistance =
+      Math.min(
+        exitDistance,
+        farDistance
+      );
+
+    if (enterDistance > exitDistance) {
+      return null;
+    }
+  }
+
+  return {
+    enterDistance,
+    exitDistance
+  };
+}
+
+// 已知 nearDistance 與 farDistance 分別落在地表兩側，
+// 用二分逼近收斂到交點距離。
+function refineTerrainCrossingDistance(
+  ray,
+  nearDistance,
+  nearDifference,
+  farDistance
+) {
+  let low = nearDistance;
+  let lowDifference = nearDifference;
+  let high = farDistance;
+
+  for (
+    let iteration = 0;
+    iteration < TERRAIN_PICK_REFINE_ITERATIONS;
+    iteration += 1
+  ) {
+    const middle =
+      (low + high) / 2;
+
+    const middleDifference =
+      signedHeightAboveTerrain(
+        ray,
+        middle
+      );
+
+    if (
+      !Number.isFinite(
+        middleDifference
+      )
+    ) {
+      break;
+    }
+
+    if (
+      (middleDifference >= 0) ===
+      (lowDifference >= 0)
+    ) {
+      low = middle;
+      lowDifference = middleDifference;
+    } else {
+      high = middle;
+    }
+  }
+
+  return (low + high) / 2;
+}
+
+// 沿射線在高度圖上行進，找出第一個穿越地表的位置。
+// 取樣間隔設為一個 DEM 像素，避免跨過細窄的山脊而漏判。
+function pickTerrainPointByHeightmapMarch(
+  ray
+) {
+  if (
+    !terrain ||
+    !terrainMetadata ||
+    !terrainElevations
+  ) {
+    return null;
+  }
+
+  const range =
+    intersectTerrainBoundsRange(ray);
+
+  if (!range) {
+    return null;
+  }
+
+  const segmentLengthKm =
+    range.exitDistance -
+    range.enterDistance;
+
+  if (
+    !(segmentLengthKm > 0)
+  ) {
+    return null;
+  }
+
+  const pixelSizeKm =
+    Math.min(
+      terrainMetadata.pixelSizeXMeters,
+      terrainMetadata.pixelSizeYMeters
+    ) / 1000;
+
+  const stepCount =
+    Math.min(
+      Math.max(
+        Math.ceil(
+          segmentLengthKm /
+          pixelSizeKm
+        ),
+        1
+      ),
+      TERRAIN_PICK_MAX_MARCH_STEPS
+    );
+
+  const stepLengthKm =
+    segmentLengthKm / stepCount;
+
+  let previousDistance =
+    range.enterDistance;
+
+  let previousDifference =
+    signedHeightAboveTerrain(
+      ray,
+      previousDistance
+    );
+
+  for (
+    let step = 1;
+    step <= stepCount;
+    step += 1
+  ) {
+    const distance =
+      range.enterDistance +
+      stepLengthKm * step;
+
+    const difference =
+      signedHeightAboveTerrain(
+        ray,
+        distance
+      );
+
+    const crossedSurface =
+      Number.isFinite(previousDifference) &&
+      Number.isFinite(difference) &&
+      (previousDifference >= 0) !==
+      (difference >= 0);
+
+    if (crossedSurface) {
+      const hitDistance =
+        refineTerrainCrossingDistance(
+          ray,
+          previousDistance,
+          previousDifference,
+          distance
+        );
+
+      const hitX =
+        ray.origin.x +
+        ray.direction.x *
+        hitDistance;
+
+      const hitZ =
+        ray.origin.z +
+        ray.direction.z *
+        hitDistance;
+
+      const hitY =
+        sampleTerrainSurfaceY(
+          hitX,
+          hitZ
+        );
+
+      if (
+        !Number.isFinite(hitY)
+      ) {
+        return null;
+      }
+
+      return new THREE.Vector3(
+        hitX,
+        hitY,
+        hitZ
+      );
+    }
+
+    previousDistance = distance;
+    previousDifference = difference;
+  }
+
+  return null;
+}
+
 function pickTerrainPoint(event) {
   const rect =
     renderer.domElement
@@ -3591,22 +3940,21 @@ function pickTerrainPoint(event) {
     camera
   );
 
-  const intersections =
-    raycaster.intersectObject(
-      terrain,
-      false
+  // 不對地形網格做 raycast：DEM 產生的三角形多達數百萬個，
+  // 暴力求交每次要數百毫秒。改為沿射線在高度圖上行進取樣，
+  // 結果同樣落在地表上，而且與 rebuildPointUsingDemHeight()
+  // 之後採用的 DEM 高度完全一致。
+  const worldPoint =
+    pickTerrainPointByHeightmapMarch(
+      raycaster.ray
     );
 
-  if (
-    intersections.length === 0
-  ) {
+  if (!worldPoint) {
     return null;
   }
 
   return createPointDataFromWorldPoint(
-    intersections[0]
-      .point
-      .clone()
+    worldPoint
   );
 }
 
