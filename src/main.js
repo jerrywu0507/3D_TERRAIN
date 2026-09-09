@@ -34,6 +34,8 @@ import { createMoonOverview } from "./moon-overview.js";
 import {
   formatKm,
   formatSignedNumber,
+  formatLatitudeWithHemisphere,
+  formatLongitudeWithHemisphere,
   escapeHtml,
   isValidElevation
 } from "./utils.js";
@@ -4146,10 +4148,14 @@ function formatCoordinatePanelPoint(
     <strong>${title}</strong><br>
 
     經度 (Longitude)：
-    ${point.longitudeDegrees.toFixed(6)}°<br>
+    ${formatLongitudeWithHemisphere(
+      point.longitudeDegrees
+    )}<br>
 
     緯度 (Latitude)：
-    ${point.latitudeDegrees.toFixed(6)}°<br>
+    ${formatLatitudeWithHemisphere(
+      point.latitudeDegrees
+    )}<br>
 
     絕對高程 (Absolute Elevation)：
     ${formatKm(point.elevationMeters)}
@@ -6263,11 +6269,15 @@ function showEnhancedHazardInformation(
 
     緯度
     (Latitude)：
-    ${point.latitudeDegrees.toFixed(6)}°<br>
+    ${formatLatitudeWithHemisphere(
+      point.latitudeDegrees
+    )}<br>
 
     經度
     (Longitude)：
-    ${point.longitudeDegrees.toFixed(6)}°<br>
+    ${formatLongitudeWithHemisphere(
+      point.longitudeDegrees
+    )}<br>
 
     絕對高程
     (Absolute Elevation)：
