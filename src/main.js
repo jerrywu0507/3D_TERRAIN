@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { ArcballControls } from "three/addons/controls/ArcballControls.js";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
 import {
   setLoadingOverlayProgress,
@@ -229,24 +229,19 @@ document.body.appendChild(renderer.domElement);
 // 4. 相機控制（Camera Controls）
 // ======================================================
 
-// 用 ArcballControls 而非 OrbitControls：OrbitControls 會把相機的
-// 上方向鎖在 +Y，垂直角度被夾在 0～π，轉到正上方或正下方就停住，
-// 無法連續翻過去。ArcballControls 沒有這個限制，可以任意方向自由翻轉。
-// 第三個參數是場景，供它建立內部的圓弧提示 gizmo。
-const controls = new ArcballControls(
+const controls = new OrbitControls(
   camera,
-  renderer.domElement,
-  scene
+  renderer.domElement
 );
 
-// 圓弧提示 gizmo 會蓋在地形上干擾判讀，關掉但保留操作行為。
-controls.setGizmosVisible(false);
-
-controls.enableAnimations = true;
+controls.enableDamping = true;
+controls.dampingFactor = 0.06;
 
 controls.enableRotate = true;
 controls.enableZoom = true;
 controls.enablePan = true;
+
+controls.maxPolarAngle = Math.PI;
 
 initUiCore({
   defaultInterfaceScale: DEFAULT_INTERFACE_SCALE,
@@ -2401,10 +2396,6 @@ function updateCamera() {
     largestDimension *
     8;
 
-  // ArcballControls 會快取相機的矩陣狀態，上面直接改了 position 與
-  // near/far，必須用 setCamera() 重新同步，否則下一次拖曳會跳回舊姿態。
-  controls.setCamera(camera);
-
   controls.update();
 }
 
@@ -3003,9 +2994,6 @@ function focusCameraOnPoint(point) {
       .clone()
       .add(offset)
   );
-
-  // 同 updateCamera()：直接搬動相機後要讓 ArcballControls 重新取得狀態。
-  controls.setCamera(camera);
 
   controls.update();
 }
@@ -4803,9 +4791,6 @@ window.addEventListener(
 // 38. 動畫迴圈（Animation Loop）
 // ======================================================
 
-// 方向指標的飛行動畫是否正在進行（用來偵測動畫結束的那一幀）。
-let viewHelperWasAnimating = false;
-
 function animate() {
   requestAnimationFrame(
     animate
@@ -4831,23 +4816,9 @@ function animate() {
   viewHelperTimer.update();
 
   if (viewHelper.animating) {
-    // ViewHelper 是繞著自己的 center 轉，讓它跟控制器的目標一致，
-    // 否則點方向指標會飛到原點而不是地形中心。
-    viewHelper.center.copy(
-      controls.target
-    );
-
     viewHelper.update(
       viewHelperTimer.getDelta()
     );
-
-    viewHelperWasAnimating = true;
-  } else if (viewHelperWasAnimating) {
-    // 動畫是直接搬動相機的，結束後必須讓 ArcballControls 重新讀取
-    // 相機狀態，不然下一次拖曳會瞬間跳回動畫開始前的姿態。
-    controls.setCamera(camera);
-
-    viewHelperWasAnimating = false;
   }
 
   viewHelper.render(renderer);
