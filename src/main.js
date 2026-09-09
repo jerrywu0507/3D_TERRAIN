@@ -83,6 +83,9 @@ const ROUTE_SAMPLE_INTERVAL_METERS = 5;
 const ROUTE_SURFACE_OFFSET_KM = 0.0001;
 const ROUTE_LINE_RADIUS_KM = 0.006;
 
+// 路線管狀外觀的環狀切面數（原本用 TubeGeometry 時的 radialSegments）。
+const ROUTE_LINE_RADIAL_SEGMENTS = 8;
+
 // 地形點選：沿射線在高度圖上行進取樣，取代對整個地形網格做 raycast。
 // 2000×2000 的 DEM 會產生約 800 萬個三角形，Three.js 的暴力 raycast
 // 每次需要數百毫秒，用在 pointermove 上會讓拖曳完全卡住。
@@ -164,6 +167,11 @@ let activeRouteInsertSegmentIndex = null;
 let routeLine = null;
 let routeSamples = [];
 let routeSlopeColoringEnabled = false;
+
+// 路線合併成單一 Mesh 後，無法再靠每段自己的 userData 判斷點到哪裡。
+// 這個陣列以「路線段序號」為索引，記錄該段屬於哪一組相鄰航點之間，
+// 點擊時用 raycast 的 faceIndex 除以每段的三角形數即可反查。
+let routeSegmentWaypointIndices = null;
 
 let namedPointMarker = null;
 
@@ -3441,7 +3449,8 @@ function pickRouteLineSegmentIndex(
 ) {
   if (
     !routeLine ||
-    routeLine.children.length === 0
+    !routeSegmentWaypointIndices ||
+    routeSegmentWaypointIndices.length === 0
   ) {
     return null;
   }
@@ -3478,8 +3487,8 @@ function pickRouteLineSegmentIndex(
   );
 
   const intersections =
-    raycaster.intersectObjects(
-      routeLine.children,
+    raycaster.intersectObject(
+      routeLine,
       false
     );
 
@@ -3489,15 +3498,37 @@ function pickRouteLineSegmentIndex(
     return null;
   }
 
-  const waypointSegmentIndex =
-    intersections[0].object
-      .userData
-      .waypointSegmentIndex;
+  const faceIndex =
+    intersections[0].faceIndex;
 
-  return (
-    typeof waypointSegmentIndex ===
-    "number"
-  )
+  if (
+    typeof faceIndex !== "number"
+  ) {
+    return null;
+  }
+
+  // 整條路線是同一份幾何，每段固定佔用相同數量的三角形，
+  // 因此可以由命中的三角形序號反推是第幾段。
+  const segmentIndex =
+    Math.floor(
+      faceIndex /
+      (ROUTE_LINE_RADIAL_SEGMENTS * 2)
+    );
+
+  if (
+    segmentIndex < 0 ||
+    segmentIndex >=
+      routeSegmentWaypointIndices.length
+  ) {
+    return null;
+  }
+
+  const waypointSegmentIndex =
+    routeSegmentWaypointIndices[
+      segmentIndex
+    ];
+
+  return waypointSegmentIndex >= 0
     ? waypointSegmentIndex
     : null;
 }
@@ -5444,15 +5475,61 @@ function analyzeRoute(
 function createEnhancedColoredRoute(
   samples
 ) {
-  routeLine =
-    new THREE.Group();
+  const segmentCount =
+    samples.length - 1;
 
-  routeLine.name =
-    "Slope-Colored Rover Route";
+  if (segmentCount < 1) {
+    return;
+  }
+
+  // 每段路線各建一個 TubeGeometry 與材質的話，5 公里的路線就會產生
+  // 上千個 Mesh，每幀都要各自做一次 draw call。改成把所有段落寫進
+  // 同一份幾何、用頂點色帶出坡度顏色，整條路線只剩一個 draw call。
+  // 材質是 MeshBasicMaterial（不受光），管子環狀切面的朝向不影響外觀，
+  // 所以可以直接組頂點，不必逐段呼叫 TubeGeometry。
+  const verticesPerSegment =
+    ROUTE_LINE_RADIAL_SEGMENTS * 2;
+
+  const trianglesPerSegment =
+    ROUTE_LINE_RADIAL_SEGMENTS * 2;
+
+  const positions =
+    new Float32Array(
+      segmentCount *
+      verticesPerSegment *
+      3
+    );
+
+  const colors =
+    new Float32Array(
+      segmentCount *
+      verticesPerSegment *
+      3
+    );
+
+  const indices =
+    new Uint32Array(
+      segmentCount *
+      trianglesPerSegment *
+      3
+    );
+
+  routeSegmentWaypointIndices =
+    new Int32Array(segmentCount);
+
+  const startPoint = new THREE.Vector3();
+  const endPoint = new THREE.Vector3();
+  const direction = new THREE.Vector3();
+  const reference = new THREE.Vector3();
+  const sideAxis = new THREE.Vector3();
+  const upAxis = new THREE.Vector3();
+  const segmentColor = new THREE.Color();
+
+  let indexOffset = 0;
 
   for (
     let index = 1;
-    index < samples.length;
+    index <= segmentCount;
     index += 1
   ) {
     const previous =
@@ -5461,74 +5538,227 @@ function createEnhancedColoredRoute(
     const current =
       samples[index];
 
-    const curve =
-      new THREE.LineCurve3(
-        new THREE.Vector3(
-          previous.localXKm,
+    startPoint.set(
+      previous.localXKm,
 
-          previous.elevationMeters /
-            1000 *
-            VERTICAL_EXAGGERATION +
-            ROUTE_SURFACE_OFFSET_KM,
+      previous.elevationMeters /
+        1000 *
+        VERTICAL_EXAGGERATION +
+        ROUTE_SURFACE_OFFSET_KM,
 
-          previous.localZKm
-        ),
-
-        new THREE.Vector3(
-          current.localXKm,
-
-          current.elevationMeters /
-            1000 *
-            VERTICAL_EXAGGERATION +
-            ROUTE_SURFACE_OFFSET_KM,
-
-          current.localZKm
-        )
-      );
-
-    const geometry =
-      new THREE.TubeGeometry(
-        curve,
-        1,
-        ROUTE_LINE_RADIUS_KM,
-        8,
-        false
-      );
-
-    const material =
-      new THREE.MeshBasicMaterial({
-        color:
-          routeSlopeColoringEnabled
-            ? getEnhancedRouteSlopeColorHex(
-                current.slopeDegrees
-              )
-            : ENHANCED_ROUTE_COLOR_DEFAULT,
-
-        depthTest: true,
-        depthWrite: false
-      });
-
-    const segment =
-      new THREE.Mesh(
-        geometry,
-        material
-      );
-
-    segment.renderOrder = 5;
-
-    segment.userData.routeSegmentIndex =
-      index;
-
-    segment.userData.slopeDegrees =
-      current.slopeDegrees;
-
-    segment.userData.waypointSegmentIndex =
-      current.waypointSegmentIndex;
-
-    routeLine.add(
-      segment
+      previous.localZKm
     );
+
+    endPoint.set(
+      current.localXKm,
+
+      current.elevationMeters /
+        1000 *
+        VERTICAL_EXAGGERATION +
+        ROUTE_SURFACE_OFFSET_KM,
+
+      current.localZKm
+    );
+
+    direction.subVectors(
+      endPoint,
+      startPoint
+    );
+
+    const segmentLength =
+      direction.length();
+
+    if (segmentLength > 0) {
+      direction.divideScalar(
+        segmentLength
+      );
+    } else {
+      direction.set(1, 0, 0);
+    }
+
+    // 取一個與路線方向不平行的參考向量，避免叉積退化成零向量
+    // （路線接近垂直時會發生）。
+    reference.set(0, 1, 0);
+
+    if (
+      Math.abs(
+        direction.dot(reference)
+      ) > 0.99
+    ) {
+      reference.set(1, 0, 0);
+    }
+
+    sideAxis
+      .crossVectors(
+        direction,
+        reference
+      )
+      .normalize();
+
+    upAxis
+      .crossVectors(
+        sideAxis,
+        direction
+      )
+      .normalize();
+
+    segmentColor.setHex(
+      routeSlopeColoringEnabled
+        ? getEnhancedRouteSlopeColorHex(
+            current.slopeDegrees
+          )
+        : ENHANCED_ROUTE_COLOR_DEFAULT
+    );
+
+    const baseVertex =
+      (index - 1) *
+      verticesPerSegment;
+
+    for (
+      let ring = 0;
+      ring < ROUTE_LINE_RADIAL_SEGMENTS;
+      ring += 1
+    ) {
+      const angle =
+        (
+          ring /
+          ROUTE_LINE_RADIAL_SEGMENTS
+        ) *
+        Math.PI *
+        2;
+
+      const cosAngle = Math.cos(angle);
+      const sinAngle = Math.sin(angle);
+
+      const offsetX =
+        (
+          sideAxis.x * cosAngle +
+          upAxis.x * sinAngle
+        ) *
+        ROUTE_LINE_RADIUS_KM;
+
+      const offsetY =
+        (
+          sideAxis.y * cosAngle +
+          upAxis.y * sinAngle
+        ) *
+        ROUTE_LINE_RADIUS_KM;
+
+      const offsetZ =
+        (
+          sideAxis.z * cosAngle +
+          upAxis.z * sinAngle
+        ) *
+        ROUTE_LINE_RADIUS_KM;
+
+      // 每個環位置放兩個頂點：段落起點與終點各一個
+      const vertexBase =
+        (baseVertex + ring * 2) * 3;
+
+      positions[vertexBase] =
+        startPoint.x + offsetX;
+      positions[vertexBase + 1] =
+        startPoint.y + offsetY;
+      positions[vertexBase + 2] =
+        startPoint.z + offsetZ;
+
+      positions[vertexBase + 3] =
+        endPoint.x + offsetX;
+      positions[vertexBase + 4] =
+        endPoint.y + offsetY;
+      positions[vertexBase + 5] =
+        endPoint.z + offsetZ;
+
+      colors[vertexBase] = segmentColor.r;
+      colors[vertexBase + 1] = segmentColor.g;
+      colors[vertexBase + 2] = segmentColor.b;
+
+      colors[vertexBase + 3] = segmentColor.r;
+      colors[vertexBase + 4] = segmentColor.g;
+      colors[vertexBase + 5] = segmentColor.b;
+    }
+
+    for (
+      let ring = 0;
+      ring < ROUTE_LINE_RADIAL_SEGMENTS;
+      ring += 1
+    ) {
+      const currentRing =
+        baseVertex + ring * 2;
+
+      const nextRing =
+        baseVertex +
+        (
+          (ring + 1) %
+          ROUTE_LINE_RADIAL_SEGMENTS
+        ) *
+        2;
+
+      indices[indexOffset] = currentRing;
+      indices[indexOffset + 1] = currentRing + 1;
+      indices[indexOffset + 2] = nextRing;
+
+      indices[indexOffset + 3] = nextRing;
+      indices[indexOffset + 4] = currentRing + 1;
+      indices[indexOffset + 5] = nextRing + 1;
+
+      indexOffset += 6;
+    }
+
+    routeSegmentWaypointIndices[index - 1] =
+      typeof current.waypointSegmentIndex ===
+      "number"
+        ? current.waypointSegmentIndex
+        : -1;
   }
+
+  const geometry =
+    new THREE.BufferGeometry();
+
+  geometry.setAttribute(
+    "position",
+
+    new THREE.BufferAttribute(
+      positions,
+      3
+    )
+  );
+
+  geometry.setAttribute(
+    "color",
+
+    new THREE.BufferAttribute(
+      colors,
+      3
+    )
+  );
+
+  geometry.setIndex(
+    new THREE.BufferAttribute(
+      indices,
+      1
+    )
+  );
+
+  geometry.computeBoundingSphere();
+
+  const material =
+    new THREE.MeshBasicMaterial({
+      vertexColors: true,
+      depthTest: true,
+      depthWrite: false
+    });
+
+  routeLine =
+    new THREE.Mesh(
+      geometry,
+      material
+    );
+
+  routeLine.name =
+    "Slope-Colored Rover Route";
+
+  routeLine.renderOrder = 5;
 
   scene.add(
     routeLine
@@ -7474,6 +7704,7 @@ function removeRouteLine() {
   );
 
   routeLine = null;
+  routeSegmentWaypointIndices = null;
 }
 
 // ======================================================
