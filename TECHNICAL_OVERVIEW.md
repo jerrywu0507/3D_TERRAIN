@@ -3,9 +3,9 @@
 This document explains how the application turns a lunar DEM into the 3D terrain,
 coordinate readouts, and rover-route safety analysis shown on screen — for anyone
 reviewing the code (e.g., for a JPL/NASA collaboration) who needs to understand the
-logic without reading all ~10,900 lines of source.
+logic without reading all ~11,550 lines of source.
 
-*Last verified: 2026-09-04 — all file/line references below were checked
+*Last verified: 2026-09-09 — all file/line references below were checked
 against the current state of the repository on this date. If the code has
 changed since, re-check line numbers with e.g. `grep -n "function name"
 src/main.js` before citing them elsewhere.*
@@ -185,6 +185,18 @@ Standard polar stereographic forward/inverse formulas
 = 0°). These match the Moon (2015) South Polar Stereographic definition used
 by the source dataset.
 
+Longitude is normalised to −180…+180 (`normalizeLongitude`), so the sign
+already encodes the hemisphere. The waypoint and profile-hover panels
+additionally spell it out — `formatLatitudeWithHemisphere` /
+`formatLongitudeWithHemisphere` (`utils.js`) append 南緯/北緯 (S/N) and
+東經/西經 (E/W) after the value, written in the `中文 (English)` form so
+`wrapBilingualText()` splits them like every other label. The **signed
+number is deliberately kept** rather than being replaced by an unsigned
+value plus a letter: the coordinate search box is a `type="number"` input
+bounded to −90…90 and −180…180, so the figures shown in the panels have to
+stay directly pasteable into it. The search inputs and the CSV/GeoJSON
+exports emit raw signed values with no hemisphere suffix.
+
 ### 4.3 Local scene axes vs. the global MOON_ME frame
 
 The scene's local X/Y/Z (East/Up/South) are **not** the same axes as the
@@ -240,12 +252,12 @@ quaternion. Two call sites apply it:
   regrouped into a rotatable sub-group once, and that sub-group's
   quaternion is set directly.
 - `axesHelper.quaternion.copy(computeGlobalAxisOrientationQuaternion(...))`
-  (`main.js:2435`) — for the in-scene axis helper. This object is a plain
+  (`main.js:2472`) — for the in-scene axis helper. This object is a plain
   `THREE.Group` added directly to `scene` (not a `ViewHelper`), so its
   quaternion can just be set directly with no extra workaround.
 
 `main.js` calls both once the terrain's centre latitude/longitude are known
-(inside `updateStatusPanel()`, `main.js:2426`/`2435`).
+(inside `updateStatusPanel()`, `main.js:2463`/`2435`).
 
 ### 4.4 In-scene axis helper and gizmo caption
 
@@ -263,7 +275,7 @@ or barely reaching the terrain's edge.
 Because both the corner gizmo and the in-scene axis helper now show the
 *global* frame rather than local compass directions, a small fixed caption
 ("全域坐標系 MOON_ME (Global Frame)" / "MOON_ME Global Frame") is anchored
-directly above the corner gizmo (`main.js:268`) so it isn't mistaken for a
+directly above the corner gizmo (`main.js:289`) so it isn't mistaken for a
 compass. It's set via `element.innerHTML` with manually-written
 `lang-zh`/`lang-en` spans rather than `wrapBilingualText()`'s automatic
 Chinese/English detection, because that regex requires the parenthesised
@@ -271,12 +283,46 @@ English text to immediately follow the Chinese run with no intervening
 Latin text — the literal identifier "MOON_ME" in the middle of the caption
 breaks that pattern.
 
+### 4.5 Screen-space picking (cursor -> terrain point)
+
+Turning a cursor position into a point on the terrain does **not** raycast
+the terrain mesh. The DEM is 2000x2000, so `THREE.PlaneGeometry` yields
+7,992,002 triangles, and `Raycaster.intersectObject()` is a brute-force
+triangle scan — a single pick measured ~429 ms on this geometry. Since
+`pickTerrainPoint()` runs on every `pointermove` while a waypoint or a
+route-line insertion is being dragged, that capped dragging at roughly two
+updates per second.
+
+`pickTerrainPointByHeightmapMarch()` (`main.js:3841`) instead marches along
+the ray over the height field:
+
+1. `intersectTerrainBoundsRange()` clips the ray to the terrain's bounding
+   box with a slab test, so sampling only happens where a hit is possible.
+2. The ray is stepped at one DEM pixel (5 m) so a narrow ridge cannot be
+   stepped over, up to `TERRAIN_PICK_MAX_MARCH_STEPS`.
+3. `signedHeightAboveTerrain()` gives the ray's height above the surface at
+   each step; a sign change brackets the crossing.
+4. `refineTerrainCrossingDistance()` binary-searches that bracket for
+   `TERRAIN_PICK_REFINE_ITERATIONS` rounds.
+
+Measured on the real DEM this is **~429 ms -> ~0.022 ms** per pick, from
+2567% of a 60 fps frame budget down to 0.13%. It was verified against the
+old mesh raycast at twelve sample points (no disagreement; worst deviation
+1.4 cm, far below the 5 m DEM pixel) and across ten edge cases including a
+camera below the terrain, grazing rays, corners, and rays that miss
+entirely.
+
+This also removed a redundancy: all five `pickTerrainPoint()` call sites
+already discarded the raycast's Y and re-sampled the DEM through
+`rebuildPointUsingDemHeight()`, so height now comes from one interpolation
+scheme instead of two (mesh-triangle interpolation vs. DEM bilinear).
+
 ## 5. Route Planning and Slope-Safety Analysis
 
 - Users click the terrain to add waypoints (`waypoints` array); the route is
   sampled at `ROUTE_SAMPLE_INTERVAL_METERS` (5 m) intervals with DEM
   bilinear interpolation for elevation.
-- `analyzeRoute()` (`main.js:4837`) computes, per sample, the **segment**
+- `analyzeRoute()` (`main.js:5243`) computes, per sample, the **segment**
   slope — `atan2(elevationDifference, thatSegment'sOwnHorizontalDistance)` —
   along with cumulative ascent/descent, horizontal and surface-path distance,
   and the location of maximum slope/ascent/descent/sudden elevation change.
@@ -284,48 +330,60 @@ breaks that pattern.
   from the route start instead of each segment's own distance, which made
   slope readings shrink toward 0° as the route got longer; this has been
   fixed and re-verified.)
-- `classifySlope()` (`main.js:4229`) buckets slope into Safe (≤10°) /
+- `classifySlope()` (`main.js:4635`) buckets slope into Safe (≤10°) /
   Warning (>10° and ≤15°) / Unsafe (>15°) — a **terrain-slope-only**
   preliminary classification. It does not yet account for rocks, small
   craters, cross-slope, rover geometry/centre of gravity, soil conditions,
   energy budget, illumination, or Earth-communication visibility (see
   section 10 for the full list).
 - The 3D route line can optionally colour each segment by this slope
-  classification (a per-segment `THREE.TubeGeometry`/`MeshBasicMaterial`),
-  toggled from the Cross Section panel; by default it renders as a single
-  flat colour.
+  classification, toggled from the Cross Section panel; by default it
+  renders as a single flat colour. `createEnhancedColoredRoute()`
+  (`main.js:5481`) writes every segment into one indexed
+  `THREE.BufferGeometry` and carries the slope colours as **vertex
+  colours**, so the whole route is a single mesh and a single draw call.
+  It previously built a separate `TubeGeometry` + `MeshBasicMaterial` +
+  `Mesh` per sample, which at a 5 m sample interval meant ~2000 meshes and
+  ~2000 draw calls for a 10 km route; construction dropped from ~24 ms to
+  ~1.6 ms for the same 31,984 triangles. The material is unlit
+  (`MeshBasicMaterial`), so the rotation of each ring around its segment
+  axis is invisible and the vertices can be emitted directly instead of
+  going through `TubeGeometry`.
 
 ### 5.1 Editing, undo, and live safety feedback
 
 Every code path that changes `waypoints` — clicking the terrain, dragging a
 waypoint, inserting after a selected point, deleting, pressing `R` to reset,
 and loading a saved route — goes through a single setter, `setWaypoints()`
-(`main.js:2811`), instead of assigning/`push`/`splice`-ing the array
+(`main.js:2848`), instead of assigning/`push`/`splice`-ing the array
 directly. `setWaypoints()` pushes a clone of the *current* array onto
 `waypointUndoStack` (capped at `MAX_WAYPOINT_UNDO_STEPS` = 50,
-`main.js:144`) before applying the change, so `undoLastWaypointChange()`
-(`main.js:2853`, bound to **Ctrl+Z**) can always pop the most recent
-snapshot back. `refreshRouteAfterWaypointChange()` (`main.js:2828`)
+`main.js:160`) before applying the change, so `undoLastWaypointChange()`
+(`main.js:2890`, bound to **Ctrl+Z**) can always pop the most recent
+snapshot back. `refreshRouteAfterWaypointChange()` (`main.js:2865`)
 centralises the "rebuild markers, rebuild the route if there are ≥2 points,
 otherwise clear it" sequence every one of those call sites needs afterward.
 
 A waypoint can also be inserted by dragging directly on the white route
 line, not just by selecting an existing waypoint first. `buildAndAnalyzeRoute()`
 stamps each dense route sample with `waypointSegmentIndex` — which pair of
-waypoints it falls between (`main.js:7020`) — and `createEnhancedColoredRoute()`
-(`main.js:5075`) copies that onto each rendered tube segment's
-`userData.waypointSegmentIndex` (`main.js:5156`). `pickRouteLineSegmentIndex()`
-(`main.js:3412`) raycasts the route line to read that index back out on
-`pointerdown`, and `finishRouteInsertPointerInteraction()` (`main.js:3183`)
-splices a new waypoint in at `segmentIndex + 1` on release — so the insert
-position always lands between the correct pair of waypoints regardless of
-how many dense samples make up the visual line.
+waypoints it falls between (`main.js:7629`) — and `createEnhancedColoredRoute()`
+(`main.js:5481`) records that per segment in the parallel
+`routeSegmentWaypointIndices` array. Because the whole route is now one
+merged mesh, there is no per-segment object to hang `userData` on; instead
+each segment occupies a fixed 16 triangles, so `pickRouteLineSegmentIndex()`
+(`main.js:3449`) raycasts the single route mesh, divides the hit's
+`faceIndex` by that fixed count to recover the segment ordinal, and looks
+the waypoint index up in the array. `finishRouteInsertPointerInteraction()`
+(`main.js:3220`) then splices a new waypoint in at `segmentIndex + 1` on
+release — so the insert position always lands between the correct pair of
+waypoints regardless of how many dense samples make up the visual line.
 
 While dragging either an existing waypoint or a point being pulled out of
 the route line, the orange marker (`clickMarker`, otherwise used for the
 last click/search location) follows the cursor and recolours live via
-`updateDragSafetyPreview()` (`main.js:3483`), using `sampleLocalSlopeDegrees()`
-(`main.js:4100`) — a bilinear-interpolated finite-difference slope estimate
+`updateDragSafetyPreview()` (`main.js:3543`), using `sampleLocalSlopeDegrees()`
+(`main.js:4506`) — a bilinear-interpolated finite-difference slope estimate
 at the exact drag position (step size = one DEM pixel) — fed through the
 same `getEnhancedRouteSlopeColorHex()` safe/warning/unsafe palette the route
 line itself uses. This gives a safety read on where the point would land
@@ -334,9 +392,9 @@ line itself uses. This gives a safety read on where the point would land
 ### 5.2 Saved routes and export
 
 **Named route storage** (`saveRouteToLocalStorage()` / `loadRouteByName()` /
-`deleteRouteByName()`, `main.js:7407`/`7484`/`7567`): routes are stored as a
+`deleteRouteByName()`, `main.js:8017`/`7484`/`7567`): routes are stored as a
 JSON array under one `localStorage` key (`SAVED_ROUTES_STORAGE_KEY`,
-`main.js:7313`), each entry `{ name, savedAt, points }` where `points` holds
+`main.js:7923`), each entry `{ name, savedAt, points }` where `points` holds
 only latitude/longitude (elevation, distance, and slope are recomputed on
 load by re-sampling the currently-loaded terrain). Saving under a name that
 already exists overwrites that entry; anything else is added as a new
@@ -349,7 +407,7 @@ hostname; (c) if the terrain currently loaded doesn't cover a saved route's
 coordinates, loading fails gracefully (partial coverage shows a "some
 points were outside range and skipped" message) rather than showing
 garbage. Exporting to CSV/GeoJSON (`exportRouteAsCsv()` /
-`exportRouteAsGeoJson()`, `main.js:7182`/`7234`) is unrelated to this
+`exportRouteAsGeoJson()`, `main.js:7792`/`7234`) is unrelated to this
 storage and produces a downloadable file with the full computed route data
 instead.
 
@@ -414,8 +472,19 @@ adopted, not just reasoned about in the abstract:
   `OrbitControls` and `ViewHelper` addons. `OrbitControls.maxPolarAngle` is
   set to `Math.PI` (full range) so the camera can orbit completely around
   and underneath the terrain rather than being capped near the horizon.
+- **Lighting:** ambient + hemisphere + two directional lights from above,
+  plus one dim upward-facing directional light. The terrain material is
+  `THREE.DoubleSide`, so orbiting under the terrain shows its backside with
+  flipped normals; with every light above it, that view collapsed into a
+  flat grey slab with no readable relief. The upward light only meaningfully
+  reaches downward-facing normals, leaving the lit top surface unchanged.
 - **Build tool:** [Vite](https://vitejs.dev/); `npm run dev` for local
-  development, `npm run build` produces a static `dist/` bundle.
+  development, `npm run build` produces a static `dist/` bundle. `base` is
+  set to `"./"` so the emitted `<script>`/`modulepreload` paths are relative
+  and the same build works at a site root or under any subpath. The two DEM
+  files and the two moon textures are likewise requested through
+  `import.meta.env.BASE_URL` rather than root-absolute paths, which
+  previously 404'd whenever the app was served from anywhere but `/`.
 - **Runtime:** pure client-side static site — no backend server, no
   database, no build-time or runtime API keys. The only server-side
   component is the offline `QGISDEM.py` pre-processing script (Python,
@@ -425,20 +494,28 @@ adopted, not just reasoned about in the abstract:
   targets desktop Chromium/Firefox; it has not been specifically tuned for
   mobile/touch input).
 - **Deployment:** since it is a static site, `dist/` can be hosted from any
-  static file host (e.g. GitHub Pages, S3, a plain web server) as long as
-  `public/heightmap_float32.bin` and `public/heightmap_metadata.json` are
-  served alongside it.
+  static file host (e.g. GitHub Pages, S3, a plain web server). Because the
+  build now uses relative asset paths, **the whole contents of `dist/`**
+  (`index.html`, `assets/`, `heightmap_float32.bin`,
+  `heightmap_metadata.json`, `moon/`) must be copied into the directory the
+  site is served from — the data files can no longer live at the server root
+  while the app is served from a subpath.
 
 ## 9. Error Handling and Failure Modes
 
-- **Terrain data fails to load** (`loadTerrainData()`, `main.js:1519`
+- **Terrain data fails to load** (`loadTerrainData()`, `main.js:1556`
   catch block) — e.g. the network request fails, or `heightmap_float32.bin`
   is corrupt/mismatched with its metadata: the error is logged to the
   browser console, the DEM Status panel shows the raw error message, and
   the full-screen loading overlay is switched into an explicit error state
   (`showLoadingOverlayError()`, red "Failed to Load Map" text) rather than
   being hidden — the user is left on a clear failure screen instead of a
-  blank or broken 3D scene.
+  blank or broken 3D scene. That error state is translucent and sets
+  `pointer-events: none`: the overlay spans the viewport at `z-index 9999`,
+  and only its `is-hidden` class used to release pointer events, so a failed
+  load left an invisible layer swallowing every click and drag — the camera
+  could not be rotated or zoomed at all, with nothing on screen suggesting
+  the overlay was the cause.
 - **Route creation with insufficient elevation data** — if the clicked/added
   waypoints don't yield at least 2 valid terrain samples (e.g. points fall
   outside the loaded DEM's coverage, or land entirely on invalid/NoData
@@ -446,11 +523,11 @@ adopted, not just reasoned about in the abstract:
   Valid Elevation Data Along the Traverse" instead of attempting to render a
   route with missing data.
 - **`localStorage` unavailable or full** — `writeSavedRoutesList()`
-  (section 5.2, `main.js:7336`) wraps the write in a `try`/`catch` and
+  (section 5.2, `main.js:7946`) wraps the write in a `try`/`catch` and
   returns `false` on failure; `saveRouteToLocalStorage()` then shows an
   explicit "Save Failed — Browser Storage May Be Full" message rather than
   failing silently (this also covers private-browsing modes where
-  `localStorage` writes can throw). `getSavedRoutesList()` (`main.js:7316`)
+  `localStorage` writes can throw). `getSavedRoutesList()` (`main.js:7926`)
   similarly falls back to an empty list rather than throwing if the stored
   JSON is missing or corrupt.
 - **General pattern:** the app favors showing a specific, human-readable
@@ -493,3 +570,17 @@ the slope-safety model specifically, section 1.1 also notes the deferred
 `main.js` state-centralisation work, and section 1 notes the lack of an
 automated test suite, both of which are open engineering items rather than
 correctness bugs.
+
+Two rendering-performance items are known but not yet addressed. The
+terrain is drawn every frame as ~8 M triangles with a
+`MeshStandardMaterial`; since it is configured `roughness: 1, metalness: 0`
+it is already close to Lambert shading in effect, so a `MeshLambertMaterial`
+would look near-identical while running a much cheaper fragment shader, and
+this is currently the largest per-frame GPU cost. Separately, the animation
+loop renders unconditionally at 60 fps even when nothing on screen is
+changing; rendering on demand (camera moved, data changed) would cut idle
+GPU load and battery use without affecting responsiveness during
+interaction. Reducing the terrain mesh below the DEM's native 2000x2000
+would cut triangle count fourfold but is a genuine
+detail-vs-performance trade-off rather than a free win, so it has been left
+as a deliberate decision for whoever needs it.

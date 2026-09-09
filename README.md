@@ -26,7 +26,9 @@ hazardous sections along the way.
   system) rather than the scene's local grid axes or a local compass
 - **Coordinate query**: click the terrain or enter a latitude/longitude to
   read that point's lunar surface coordinates, projected coordinates, and
-  absolute elevation
+  absolute elevation; latitude and longitude are labelled with their
+  hemisphere (S/N, E/W — 南緯/北緯, 東經/西經 in Chinese) while keeping the
+  signed value, so the figures stay directly pasteable into the search box
 - **Mission route planning**: click or search to add any number of waypoints
   in sequence; the app automatically generates a terrain-following
   multi-segment route and computes:
@@ -115,6 +117,16 @@ Other commands:
 npm run build     # Build for production (output to dist/)
 npm run preview   # Preview the production build
 ```
+
+### Deploying the built site
+
+The build uses relative asset paths (`base: "./"` in `vite.config.js`), so
+one build works at a site root or under any subpath (e.g. `/terrain/`).
+Copy **the entire contents of `dist/`** — `index.html`, `assets/`,
+`heightmap_float32.bin`, `heightmap_metadata.json` and `moon/` — into the
+directory the site is served from. The DEM and texture files are resolved
+relative to the page, so they cannot be left at the server root while the
+app itself is served from a subpath.
 
 ### Using Your Own DEM Data (e.g. a different candidate landing region)
 
