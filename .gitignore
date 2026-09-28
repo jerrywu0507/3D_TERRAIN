@@ -3,3 +3,10 @@ node_modules/
 .env
 .claude/
 dist/
+
+# 交付用文件（由 Markdown 文件與原始碼再製而成，不納入版控）
+*.docx
+*.pdf
+
+# 暫存實驗資料
+.scratch/
