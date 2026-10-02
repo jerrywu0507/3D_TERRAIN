@@ -14,9 +14,10 @@ export function formatKm(
   );
 }
 
-// 緯度／經度的顯示格式：保留原本的帶號數值（座標搜尋輸入框收的是
-// -90～90 與 -180～180 的帶號值，面板上的數字要能直接複製過去），
-// 再補上半球標示。括號寫法會被 wrapBilingualText() 拆成中英雙語。
+// 緯度／經度的顯示格式：數值取絕對值，方向由半球標示表達
+// （例如 84.053178° 南緯 (S)），避免「-84° S」這種負號與方位重複的寫法。
+// 座標搜尋輸入框仍收 -90～90 與 -180～180 的帶號值，南緯、西經要輸入負數。
+// 括號寫法會被 wrapBilingualText() 拆成中英雙語。
 export function formatLatitudeWithHemisphere(
   latitudeDegrees,
   digits = 6
@@ -32,7 +33,7 @@ export function formatLatitudeWithHemisphere(
       ? "北緯 (N)"
       : "南緯 (S)";
 
-  return `${latitudeDegrees.toFixed(digits)}° ${hemisphere}`;
+  return `${Math.abs(latitudeDegrees).toFixed(digits)}° ${hemisphere}`;
 }
 
 export function formatLongitudeWithHemisphere(
@@ -50,7 +51,7 @@ export function formatLongitudeWithHemisphere(
       ? "東經 (E)"
       : "西經 (W)";
 
-  return `${longitudeDegrees.toFixed(digits)}° ${hemisphere}`;
+  return `${Math.abs(longitudeDegrees).toFixed(digits)}° ${hemisphere}`;
 }
 
 export function formatSignedNumber(

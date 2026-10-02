@@ -2527,10 +2527,14 @@ function updateStatusPanel() {
     <br>
 
     任務區中心座標 (Mission Area Center)：
-    ${centerGeographic.latitudeDegrees.toFixed(6)}°,
-    ${normalizeLongitude(
-      centerGeographic.longitudeDegrees
-    ).toFixed(6)}°
+    ${formatLatitudeWithHemisphere(
+      centerGeographic.latitudeDegrees
+    )},
+    ${formatLongitudeWithHemisphere(
+      normalizeLongitude(
+        centerGeographic.longitudeDegrees
+      )
+    )}
 
     ｜中心高程 (Center Elevation)：
     ${
@@ -2678,8 +2682,8 @@ function executeCoordinateAction(action) {
 
     showCoordinateSearchMessage(
       `已設定起點 (Start Point Set)：` +
-      `${point.latitudeDegrees.toFixed(6)}°, ` +
-      `${point.longitudeDegrees.toFixed(6)}°`,
+      `${formatLatitudeWithHemisphere(point.latitudeDegrees)}, ` +
+      `${formatLongitudeWithHemisphere(point.longitudeDegrees)}`,
       "#42ff78"
     );
 
@@ -2699,12 +2703,12 @@ function executeCoordinateAction(action) {
     showCoordinateSearchMessage(
       isFirstPoint
         ? `已設定起點 (Start Point Set)：` +
-          `${point.latitudeDegrees.toFixed(6)}°, ` +
-          `${point.longitudeDegrees.toFixed(6)}°`
+          `${formatLatitudeWithHemisphere(point.latitudeDegrees)}, ` +
+          `${formatLongitudeWithHemisphere(point.longitudeDegrees)}`
         : `路徑點 (Waypoint) ${waypoints.length - 1} ` +
           `已新增 (Added)：` +
-          `${point.latitudeDegrees.toFixed(6)}°, ` +
-          `${point.longitudeDegrees.toFixed(6)}°`,
+          `${formatLatitudeWithHemisphere(point.latitudeDegrees)}, ` +
+          `${formatLongitudeWithHemisphere(point.longitudeDegrees)}`,
       isFirstPoint
         ? "#42ff78"
         : "#ffcc55"
@@ -6388,8 +6392,8 @@ function selectNamedPointMarker() {
 
   showCoordinateSearchMessage(
     `已將標記點設為起點 (Start Point Set to Marked Point)：` +
-    `${point.latitudeDegrees.toFixed(6)}°, ` +
-    `${point.longitudeDegrees.toFixed(6)}°`,
+    `${formatLatitudeWithHemisphere(point.latitudeDegrees)}, ` +
+    `${formatLongitudeWithHemisphere(point.longitudeDegrees)}`,
     "#42ff78"
   );
 }
@@ -7449,15 +7453,15 @@ function processEnhancedProfilePointerMove(
 
     緯度
     (Latitude)：
-    ${selectedSample
-      .latitudeDegrees
-      .toFixed(6)}°
+    ${formatLatitudeWithHemisphere(
+      selectedSample.latitudeDegrees
+    )}
 
     ｜經度
     (Longitude)：
-    ${selectedSample
-      .longitudeDegrees
-      .toFixed(6)}°
+    ${formatLongitudeWithHemisphere(
+      selectedSample.longitudeDegrees
+    )}
   `);
 
   drawEnhancedRouteProfile(
