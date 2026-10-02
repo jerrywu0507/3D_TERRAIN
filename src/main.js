@@ -67,6 +67,10 @@ import {
 
 const VERTICAL_EXAGGERATION = 1;
 
+// 地形邊緣厚度（公里）：四邊側牆沿著地表邊緣往下延伸這麼多，
+// 讓地形從側面看有一點實體厚度，而不是一張紙。數值越大越厚。
+const TERRAIN_BASE_THICKNESS_KM = 0.03;
+
 // public/ 底下的資源改以建置時的 base 組出路徑（結尾一定帶斜線）。
 // 原本寫死成 "/heightmap_float32.bin" 這種根目錄絕對路徑，
 // 部署在子路徑（例如 /terrain/）時會被解析到網站根目錄而全部 404。
@@ -1895,6 +1899,12 @@ function createTerrain(
 
   scene.add(terrain);
 
+  createTerrainBase(
+    geometry,
+    width,
+    height
+  );
+
   updateSceneHelpers();
   updateCamera();
   updateStatusPanel();
@@ -1902,6 +1912,104 @@ function createTerrain(
   showMissionInstructions();
   showCoordinateInformation();
   createNamedPointMarker();
+}
+
+// ======================================================
+// 20b. 地形邊緣厚度（Terrain Base）：沿地表邊緣往下的四邊側牆
+// ======================================================
+
+let terrainBase = null;
+
+function createTerrainBase(
+  surfaceGeometry,
+  width,
+  height
+) {
+  if (terrainBase) {
+    scene.remove(terrainBase);
+    terrainBase.geometry.dispose();
+    terrainBase.material.dispose();
+    terrainBase = null;
+  }
+
+  const surface =
+    surfaceGeometry.attributes.position;
+
+  const thickness =
+    TERRAIN_BASE_THICKNESS_KM *
+    VERTICAL_EXAGGERATION;
+
+  // 沿外框依序走一圈：上邊 → 右邊 → 下邊（反向）→ 左邊（反向）
+  const ring = [];
+
+  for (let column = 0; column < width; column += 1) {
+    ring.push(column);
+  }
+
+  for (let row = 1; row < height; row += 1) {
+    ring.push(row * width + (width - 1));
+  }
+
+  for (let column = width - 2; column >= 0; column -= 1) {
+    ring.push((height - 1) * width + column);
+  }
+
+  for (let row = height - 2; row > 0; row -= 1) {
+    ring.push(row * width);
+  }
+
+  const vertices = [];
+
+  for (let i = 0; i < ring.length; i += 1) {
+    const a = ring[i];
+    const b = ring[(i + 1) % ring.length];
+
+    const ax = surface.getX(a);
+    const ay = surface.getY(a);
+    const az = surface.getZ(a);
+    const bx = surface.getX(b);
+    const by = surface.getY(b);
+    const bz = surface.getZ(b);
+
+    vertices.push(
+      ax, ay, az, bx, by, bz, bx, by - thickness, bz,
+      ax, ay, az, bx, by - thickness, bz, ax, ay - thickness, az
+    );
+  }
+
+  const geometry =
+    new THREE.BufferGeometry();
+
+  geometry.setAttribute(
+    "position",
+    new THREE.Float32BufferAttribute(
+      vertices,
+      3
+    )
+  );
+
+  geometry.computeVertexNormals();
+  geometry.computeBoundingBox();
+  geometry.computeBoundingSphere();
+
+  const material =
+    new THREE.MeshStandardMaterial({
+      color: 0x4a4a4a,
+      roughness: 1,
+      metalness: 0,
+      side: THREE.DoubleSide
+    });
+
+  terrainBase =
+    new THREE.Mesh(
+      geometry,
+      material
+    );
+
+  terrainBase.name =
+    "Nobile Rim 2 Terrain Base";
+
+  scene.add(terrainBase);
 }
 
 // ======================================================
